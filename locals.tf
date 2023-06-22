@@ -1,20 +1,19 @@
 locals {
-  api_prefix        = var.staff_prefix != "/" ? "${var.staff_prefix}api/" : "/api/"
-  certbot_port      = 80
-  data_volume       = "${var.name}-data"
-  db_url            = "jdbc:mysql://${var.db_host}:3306/${var.db_name}?useUnicode=true&characterEncoding=UTF-8&user=${data.aws_ssm_parameter.db_username.value}&password=${data.aws_ssm_parameter.db_password.value}&useSSL=false&allowPublicKeyRetrieval=true"
-  hostnames         = toset([var.public_hostname, var.staff_hostname])
-  listener_priority = var.listener_priority * 10 # create gaps in sequence for targets
-  memory            = var.app_memory + var.solr_memory
-  oai_prefix        = var.public_prefix != "/" ? "${var.public_prefix}oai" : "/oai"
-  proxy_port        = 4000
-  proxy_type        = var.public_hostname == var.staff_hostname ? "single" : "multi"
-  public_url        = "https://${var.public_hostname}${var.public_prefix}"
-  solr_url          = "http://${var.network_mode == "awsvpc" ? "localhost" : "solr"}:8983/solr/archivesspace"
-  solr_volume       = "${var.name}-solr"
-  staff_prefix      = var.staff_prefix != "/" ? trimsuffix(var.staff_prefix, "/") : var.staff_prefix
-  staff_url         = "https://${var.staff_hostname}${var.staff_prefix}"
-  upstream_host     = var.network_mode == "awsvpc" ? "localhost" : "app"
+  api_prefix    = var.staff_prefix != "/" ? "${var.staff_prefix}api/" : "/api/"
+  certbot_port  = 80
+  data_volume   = "${var.name}-data"
+  db_url        = "jdbc:mysql://${var.db_host}:3306/${var.db_name}?useUnicode=true&characterEncoding=UTF-8&user=${data.aws_ssm_parameter.db_username.value}&password=${data.aws_ssm_parameter.db_password.value}&useSSL=false&allowPublicKeyRetrieval=true"
+  hostnames     = toset([var.public_hostname, var.staff_hostname])
+  memory        = var.app_memory + var.solr_memory
+  oai_prefix    = var.public_prefix != "/" ? "${var.public_prefix}oai" : "/oai"
+  proxy_port    = 4000
+  proxy_type    = var.public_hostname == var.staff_hostname ? "single" : "multi"
+  public_url    = "https://${var.public_hostname}${var.public_prefix}"
+  solr_url      = "http://${var.network_mode == "awsvpc" ? "localhost" : "solr"}:8983/solr/archivesspace"
+  solr_volume   = "${var.name}-solr"
+  staff_prefix  = var.staff_prefix != "/" ? trimsuffix(var.staff_prefix, "/") : var.staff_prefix
+  staff_url     = "https://${var.staff_hostname}${var.staff_prefix}"
+  upstream_host = var.network_mode == "awsvpc" ? "localhost" : "app"
 
   task_config = {
     api_prefix         = local.api_prefix
@@ -64,7 +63,6 @@ locals {
       health    = "/health"
       paths     = ["*"]
       port      = local.certbot_port
-      priority  = local.listener_priority
     }
     proxy = {
       container = "proxy"
@@ -73,7 +71,6 @@ locals {
       health    = "/health"
       paths     = ["*"]
       port      = local.proxy_port
-      priority  = local.listener_priority + 1
     }
   }
 }

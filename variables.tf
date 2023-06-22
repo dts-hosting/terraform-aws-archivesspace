@@ -93,10 +93,6 @@ variable "instances" {
   default = 1
 }
 
-variable "listener_priority" {
-  description = "ALB listener priority (actual value is: int * 10)"
-}
-
 variable "name" {
   description = "AWS ECS resources name/alias (service name, task definition name etc.)"
 }

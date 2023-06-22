@@ -27,7 +27,6 @@ resource "aws_lb_listener_rule" "this" {
   for_each = local.targets
 
   listener_arn = each.value.arn
-  priority     = each.value.priority
 
   action {
     type             = "forward"

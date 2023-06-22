@@ -80,7 +80,6 @@ module "archivesspace" {
   db_username_param  = aws_ssm_parameter.db_username.name
   http_listener_arn  = module.alb.http_tcp_listener_arns[0]
   https_listener_arn = module.alb.https_listener_arns[0]
-  listener_priority  = 1
   name               = "ex-complete"
   public_hostname    = "${local.name}.${var.domain}"
   security_group_id  = module.archivesspace_sg.security_group_id

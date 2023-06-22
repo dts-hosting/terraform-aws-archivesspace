@@ -45,21 +45,6 @@ a listener rule.
 
 The `https_listener_arn` routes traffic to ArchivesSpace.
 
-The `listener_priority` acts as a kind of "id" for the instance.
-The assigned priority is multiplied by 10 to create "space" for
-assigning priorities to routes. Given `listener_priority = 1`:
-
-```txt
-certbot (* 10 + 0) = 10 (http listener)
-proxy:  (* 10 + 1) = 11 (https listener)
-```
-
-This ensures that a single, unique `listener_priority` per instance
-can create a deterministic priority assignment without conflicts
-as instances are added, updated or removed.
-
-Note: [priority has a maximum value of 50000](https://docs.aws.amazon.com/elasticloadbalancing/latest/APIReference/API_CreateRule.html)
-
 ### Resource allocations
 
 #### Cpu

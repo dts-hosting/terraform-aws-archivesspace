@@ -57,7 +57,6 @@ module "archivesspace" {
   db_username_param  = var.db_username_param
   http_listener_arn  = data.aws_lb_listener.http.arn
   https_listener_arn = data.aws_lb_listener.https.arn
-  listener_priority  = 1
   name               = "ex-service"
   public_hostname    = "${local.name}-pui.${var.domain}"
   public_prefix      = "/"
