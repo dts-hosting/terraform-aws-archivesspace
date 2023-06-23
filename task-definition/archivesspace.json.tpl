@@ -117,6 +117,11 @@
         "condition": "START"
       }
     ],
+    %{ if network_mode != "awsvpc" }
+    "links": [
+      "app"
+    ],
+    %{ endif ~}
     "logConfiguration": {
       "logDriver": "awslogs",
       "options": {
@@ -183,6 +188,11 @@
         "condition": "START"
       }
     ],
+    %{ if network_mode != "awsvpc" }
+    "links": [
+      "solr"
+    ],
+    %{ endif ~}
     "logConfiguration": {
       "logDriver": "awslogs",
       "options": {
