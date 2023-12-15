@@ -213,7 +213,7 @@
       },
       {
         "name": "JAVA_OPTS",
-        "value": "${java_opts}"
+        "value": "${java_opts} -XX:ActiveProcessorCount=${java_cpu}"
       },
       {
         "name": "TZ",
@@ -282,7 +282,11 @@
     "environment": [
       {
         "name": "SOLR_JAVA_MEM",
-        "value": "-Xms${solr_memory}m -Xmx${solr_memory}m -Dsolr.lock.type=${solr_lock_type}"
+        "value": "-Xms${solr_memory}m -Xmx${solr_memory}m"
+      },
+      {
+        "name": "SOLR_OPTS",
+        "value": "-Dsolr.lock.type=${solr_lock_type} -XX:ActiveProcessorCount=${java_cpu}"
       }
     ],
     "mountPoints": [

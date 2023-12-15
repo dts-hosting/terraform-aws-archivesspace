@@ -108,6 +108,11 @@ variable "instances" {
   default = 1
 }
 
+variable "java_cpu" {
+  default     = 1
+  description = "Set the allocated cpu for the jvm"
+}
+
 variable "java_opts" {
   default = "-Djava.awt.headless=true -Dfile.encoding=UTF-8 -server -Xss512k -Djavax.accessibility.assistive_technologies=''"
 }

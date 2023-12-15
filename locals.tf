@@ -32,6 +32,7 @@ locals {
   indexer_state_volume     = "${local.name}-indexer_state"
   initialize_plugins       = var.initialize_plugins
   instances                = var.instances
+  java_cpu                 = var.java_cpu
   java_opts                = var.java_opts
   memory                   = var.task_memory
   name                     = var.name
@@ -89,6 +90,7 @@ locals {
     indexer_pui_state   = local.indexer_pui_state_volume
     indexer_state       = local.indexer_state_volume
     initialize_plugins  = local.initialize_plugins
+    java_cpu            = local.java_cpu
     java_opts           = local.java_opts
     log_group           = aws_cloudwatch_log_group.this.name
     name                = local.name
