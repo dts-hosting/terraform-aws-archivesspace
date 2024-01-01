@@ -279,7 +279,7 @@ module "archivesspace_sg" {
 
 module "alb" {
   source  = "terraform-aws-modules/alb/aws"
-  version = "9.2.0"
+  version = "9.4.0"
 
   name               = local.name
   load_balancer_type = "application"
