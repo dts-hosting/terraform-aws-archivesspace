@@ -48,8 +48,23 @@ tcp_nodelay on;
 location /health {
   default_type text/html;
   return 200 "<!DOCTYPE html><h1>Not too bad!</h1>\n";
+  access_log off;
 }
 
 location /status {
   proxy_pass http://app_api/schemas/repository;
 }
+
+
+location ~* (\.php|\.asp|\.aspx|\.cgi|\.pl|\.exe|\.sh|\.bat|\.cmd|\.py|\.rb|\.jar|\.war|\.dll|\.bin|config\.inc\.php|config\.ini|\.env|\.git|\.svn|\.hg|\.bzr|\.DS_Store|thumbs\.db|desktop\.ini|backup\.zip|backup\.tar|\.bak|\.sql|setup\.php|install\.php|setup-config\.php|web\.config|installer\.php|update\.php|install\.sql|install\.txt|index\.php\.bak) {
+    deny all;
+}
+
+location ~* (wp-admin|wp-includes|wp-content|xmlrpc\.php|wp-login\.php|wp-config\.php|wp-cron\.php|wp-trackback\.php|wp-comments-post\.php|wp-links-opml\.php) {
+    deny all;
+}
+
+#location ~ ^/repositories/\d+/resources/\d+/infinite/waypoints {
+#    limit_req zone=waypoints_limit burst=10 nodelay;
+#    try_files $uri $uri/ =404;
+#}

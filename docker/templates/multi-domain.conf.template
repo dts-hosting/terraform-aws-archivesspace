@@ -19,6 +19,13 @@ server_names_hash_bucket_size 128;
 server {
   server_name ${PUBLIC_NAME};
   set_real_ip_from ${REAL_IP_CIDR};
+
+http {
+  map $request_body $nopass_request_body {
+      ~(^|.*[&?])(password=)[^&]*(&.*|$) $1$2*********$3;
+      default $request_body;
+  }
+
   include /etc/nginx/common-config;
 
   location ${PUBLIC_PREFIX} {
@@ -32,6 +39,7 @@ server {
     deny all;
     proxy_pass http://app_oai/;
   }
+
 }
 
 server {
