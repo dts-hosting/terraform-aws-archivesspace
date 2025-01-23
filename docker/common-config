@@ -53,4 +53,5 @@ location /health {
 
 location /status {
   proxy_pass http://app_api/schemas/repository;
+  access_log off;
 }
