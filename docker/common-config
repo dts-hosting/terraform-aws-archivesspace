@@ -45,7 +45,7 @@ server_tokens on;
 tcp_nopush  on;
 tcp_nodelay on;
 
-location /status {
+location /health {
   default_type text/html;
   return 200 "<!DOCTYPE html><h1>Not too bad!</h1>\n";
   access_log off;
