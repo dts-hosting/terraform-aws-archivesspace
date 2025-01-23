@@ -1,3 +1,5 @@
+limit_req_zone $binary_remote_addr zone=waypoints_limit:10m rate=5r/s;
+
 upstream app_api {
   server ${UPSTREAM_HOST}:8089;
 }
@@ -19,13 +21,6 @@ server_names_hash_bucket_size 128;
 server {
   server_name ${PUBLIC_NAME};
   set_real_ip_from ${REAL_IP_CIDR};
-
-http {
-  map $request_body $nopass_request_body {
-      ~(^|.*[&?])(password=)[^&]*(&.*|$) $1$2*********$3;
-      default $request_body;
-  }
-
   include /etc/nginx/common-config;
 
   location ${PUBLIC_PREFIX} {
@@ -34,12 +29,24 @@ http {
     proxy_pass http://app_public;
   }
 
+  location ~* (\.php|\.asp|\.aspx|\.cgi|\.pl|\.exe|\.sh|\.bat|\.cmd|\.py|\.rb|\.jar|\.war|\.dll|\.bin|config\.inc\.php|config\.ini|\.env|\.git|\.svn|\.hg|\.bzr|\.DS_Store|thumbs\.db|desktop\.ini|backup\.zip|backup\.tar|\.bak|\.sql|setup\.php|install\.php|setup-config\.php|web\.config|installer\.php|update\.php|install\.sql|install\.txt|index\.php\.bak) {
+      deny all;
+  }
+
+  location ~* (wp-admin|wp-includes|wp-content|xmlrpc\.php|wp-login\.php|wp-config\.php|wp-cron\.php|wp-trackback\.php|wp-comments-post\.php|wp-links-opml\.php) {
+      deny all;
+  }
+
+  location ~ ^/repositories/\d+/resources/\d+/infinite/waypoints {
+    limit_req zone=waypoints_limit burst=10 nodelay;
+    try_files $uri $uri/ =404;
+  }
+
   location ${OAI_PREFIX} {
     ${PUI_IPS_ALLOWED};
     deny all;
     proxy_pass http://app_oai/;
   }
-
 }
 
 server {
