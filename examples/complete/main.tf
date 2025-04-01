@@ -281,7 +281,7 @@ module "archivesspace_sg" {
 
 module "alb" {
   source  = "terraform-aws-modules/alb/aws"
-  version = "9.13.0"
+  version = "9.15.0"
 
   name               = local.name
   load_balancer_type = "application"
@@ -324,7 +324,7 @@ module "alb" {
 
 module "efs" {
   source  = "terraform-aws-modules/efs/aws"
-  version = "1.7.0"
+  version = "1.8.0"
 
   # File system
   name      = local.name
@@ -412,7 +412,7 @@ module "ecs" {
 
 module "db" {
   source  = "terraform-aws-modules/rds/aws"
-  version = "6.10.0"
+  version = "6.11.0"
 
   identifier = local.name
 
