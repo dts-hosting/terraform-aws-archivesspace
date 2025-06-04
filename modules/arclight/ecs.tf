@@ -10,9 +10,8 @@ resource "aws_ecs_task_definition" "this" {
   ephemeral_storage {
     size_in_gib = local.storage
   }
-  
-  container_definitions = templatefile("${path.module}/task-definition/arclight.json.tpl", local.task_config)
 
+  container_definitions = templatefile("${path.module}/task-definition/arclight.json.tpl", local.task_config)
 }
 
 resource "aws_ecs_service" "this" {
@@ -55,6 +54,12 @@ resource "aws_ecs_service" "this" {
   }
 
   tags = local.tags
+}
+
+resource "aws_ssm_parameter" "secret_key_base" {
+  name  = "${local.name}-secret-key-base"
+  type  = "SecureString"
+  value = local.secret_key_base
 }
 
 resource "aws_cloudwatch_log_group" "this" {

@@ -1,5 +1,12 @@
 data "aws_region" "current" {}
 
+resource "random_bytes" "secret_key_base" {
+  length = 24 # 24 bytes because BASE64 encoding makes this 32 bytes
+}
+
+variable "arclight_url" {
+  description = "Arclight URL"
+}
 
 variable "assign_public_ip" {
   default = false
@@ -14,16 +21,6 @@ variable "cpu" {
   default     = 256
 }
 
-variable "memory" {
-  description = "Task level memory allocation (hard limit)"
-  default     = 512
-}
-
-variable "storage" {
-  description = "Task level storage allocation"
-  default     = 20
-}
-
 variable "cluster_id" {
   description = "ECS cluster id"
 }
@@ -36,31 +33,6 @@ variable "custom_env_cfg" {
 variable "custom_secrets_cfg" {
   description = "General secrets name/value configuration"
   default     = {}
-}
-
-variable "rails_assume_ssl" {
-  description = "RAILS to Assume all access will happen through SSL"
-  default = "true"
-}
-
-variable "rails_env" {
-  description = "RAILS "
-  default = "production"
-}
-
-variable "rails_force_ssl" {
-  description = "RAILS to forces all access will happen through SSL"
-  default = "true"
-}
-
-variable "rails_log_to_stdout" {
-  description = "Output Log to STDOUT"
-  default = "true"
-}
-
-variable "rails_serve_static_files" {
-  description = "Serve Static Fails"
-  default     = "true"
 }
 
 variable "iam_ecs_task_role_arn" {
@@ -79,18 +51,14 @@ variable "listener_arn" {
   description = "ALB (https) listener arn"
 }
 
-variable "listener_priority" {
-  description = "ALB (https) listener priority (actual value is: int * 10)"
+variable "memory" {
+  description = "Task level memory allocation (hard limit)"
+  default     = 512
 }
 
 variable "name" {
   description = "AWS ECS resources name/alias (service name, task definition name etc.)"
 }
-
-variable "arclight_url" {
-  description = "Arclight URL"
-}
-
 
 variable "network_mode" {
   default = "awsvpc"
@@ -111,6 +79,31 @@ variable "port" {
   default     = 3000
 }
 
+variable "rails_assume_ssl" {
+  description = "RAILS to Assume all access will happen through SSL"
+  default     = "true"
+}
+
+variable "rails_env" {
+  description = "RAILS "
+  default     = "production"
+}
+
+variable "rails_force_ssl" {
+  description = "RAILS to forces all access will happen through SSL"
+  default     = "true"
+}
+
+variable "rails_log_to_stdout" {
+  description = "Output Log to STDOUT"
+  default     = "true"
+}
+
+variable "rails_serve_static_files" {
+  description = "Serve Static Fails"
+  default     = "true"
+}
+
 variable "requires_compatibilities" {
   default = ["FARGATE"]
 }
@@ -119,8 +112,17 @@ variable "security_group_id" {
   description = "Security group id"
 }
 
+variable "site" {
+  description = "The site configuration for Arclight"
+}
+
 variable "solr_url" {
   description = "Arclight solr url"
+}
+
+variable "storage" {
+  description = "Task level storage allocation"
+  default     = 25
 }
 
 variable "subnets" {
@@ -143,8 +145,4 @@ variable "timezone" {
 
 variable "vpc_id" {
   description = "VPC id"
-}
-
-resource "random_bytes" "secret_key_base" {
-  length = 24 # 24 bytes because BASE64 encoding makes this 32 bytes
 }

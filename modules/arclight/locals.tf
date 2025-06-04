@@ -10,16 +10,16 @@ locals {
   iam_ecs_task_role_arn    = var.iam_ecs_task_role_arn
   img                      = var.img
   instances                = var.instances
-  secret_key_base          = random_bytes.secret_key_base.base64
   listener_arn             = var.listener_arn
-  listener_priority        = var.listener_priority
   memory                   = var.memory
   name                     = var.name
   network_mode             = var.network_mode
   placement_strategies     = var.placement_strategies
   port                     = var.port
   requires_compatibilities = var.requires_compatibilities
+  secret_key_base          = random_bytes.secret_key_base.hex
   security_group_id        = var.security_group_id
+  site                     = var.site
   solr_url                 = var.solr_url
   subnets                  = var.subnets
   swap_size                = 2048
@@ -27,7 +27,7 @@ locals {
   target_type              = var.target_type
   timezone                 = var.timezone
   vpc_id                   = var.vpc_id
-  
+
   rails_assume_ssl         = var.rails_assume_ssl
   rails_env                = var.rails_env
   rails_force_ssl          = var.rails_force_ssl
@@ -35,25 +35,26 @@ locals {
   rails_serve_static_files = var.rails_serve_static_files
 
   task_config = {
-    capacity_provider         = local.capacity_provider
-    custom_env_cfg            = local.custom_env_cfg
-    custom_secrets_cfg        = local.custom_secrets_cfg
-    arclight_url              = local.arclight_url
-    img                       = local.img
-    log_group                 = aws_cloudwatch_log_group.this.name
-    memory                    = local.memory
-    name                      = local.name
-    network_mode              = local.network_mode
-    port                      = local.port
-    region                    = data.aws_region.current.name
-    secret_key_base           = local.secret_key_base
-    solr_url                  = local.solr_url
-    swap_size                 = local.swap_size
-    timezone                  = local.timezone
-    rails_assume_ssl          = local.rails_assume_ssl
-    rails_env                 = local.rails_env
-    rails_force_ssl           = local.rails_force_ssl
-    rails_log_to_stdout       = local.rails_log_to_stdout 
-    rails_serve_static_files  = local.rails_serve_static_files
+    capacity_provider        = local.capacity_provider
+    custom_env_cfg           = local.custom_env_cfg
+    custom_secrets_cfg       = local.custom_secrets_cfg
+    arclight_url             = local.arclight_url
+    img                      = local.img
+    log_group                = aws_cloudwatch_log_group.this.name
+    memory                   = local.memory
+    name                     = local.name
+    network_mode             = local.network_mode
+    port                     = local.port
+    rails_assume_ssl         = local.rails_assume_ssl
+    rails_env                = local.rails_env
+    rails_force_ssl          = local.rails_force_ssl
+    rails_log_to_stdout      = local.rails_log_to_stdout
+    rails_serve_static_files = local.rails_serve_static_files
+    region                   = data.aws_region.current.name
+    secret_key_base          = aws_ssm_parameter.secret_key_base.arn
+    site                     = local.site
+    solr_url                 = local.solr_url
+    swap_size                = local.swap_size
+    timezone                 = local.timezone
   }
 }

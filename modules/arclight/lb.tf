@@ -21,7 +21,6 @@ resource "aws_lb_target_group" "this" {
 
 resource "aws_lb_listener_rule" "this" {
   listener_arn = local.listener_arn
-  priority     = local.listener_priority
 
   action {
     type             = "forward"

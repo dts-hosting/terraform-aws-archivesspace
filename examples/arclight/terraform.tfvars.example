@@ -1,6 +1,0 @@
-arclight_img        = "lyrasis/arclight"
-certificate_domain = "*.lyrasistechnology.org"
-domain             = "lyrasistechnology.org"
-profile            = "default"
-profile_for_dns    = "default"
-solr_img           = "lyrasis/arclight-solr"

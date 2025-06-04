@@ -7,7 +7,7 @@
     "environment": [
       {
         "name": "ARCLIGHT_SITE",
-        "value": "${name}"
+        "value": "${site}"
       },
       {
         "name": "RAILS_ASSUME_SSL",
@@ -56,7 +56,7 @@
       "options": {
         "awslogs-group": "${log_group}",
         "awslogs-region": "${region}",
-        "awslogs-stream-prefix": "dspace"
+        "awslogs-stream-prefix": "arclight"
       }
     }
   }
