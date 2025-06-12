@@ -1,13 +1,13 @@
-variable "archivesspace_img" {
-  default = "archivesspace/archivesspace:latest"
+variable "arclight_img" {
+  default = "lyrasis/arclight:latest"
 }
 
 variable "domain" {
-  default = "archivesspace.org"
+  default = "lyrtech.org"
 }
 
 variable "solr_img" {
-  default = "archivesspace/solr:latest"
+  default = "lyrasis/arclight-solr:latest"
 }
 
 ################################################################################
@@ -22,24 +22,14 @@ variable "role" {}
 variable "service" {}
 ### module
 variable "cluster_name" {}
-variable "db_host" {}
-variable "db_name" {}
-variable "db_password_param" {}
-variable "db_username_param" {}
 variable "efs_name" {}
+variable "iam_role" {}
 variable "lb_name" {}
 variable "security_group_name" {}
-variable "smtp_address" {}
-variable "smtp_domain" {}
-variable "smtp_from_address" {}
-variable "smtp_password_param" {}
-variable "smtp_username_param" {}
+variable "site" {}
 variable "solr_discovery_namespace" {}
 variable "subnet_type" {}
 variable "vpc_name" {}
-
-data "aws_availability_zones" "available" {}
-data "aws_caller_identity" "current" {}
 
 data "aws_ecs_cluster" "selected" {
   cluster_name = var.cluster_name
@@ -49,6 +39,10 @@ data "aws_efs_file_system" "selected" {
   tags = {
     Name = var.efs_name
   }
+}
+
+data "aws_iam_role" "ecs_task_role" {
+  name = var.iam_role
 }
 
 data "aws_lb" "selected" {
