@@ -127,8 +127,16 @@
         "value": "${staff_url}"
       },
       {
+        "name": "APPCONFIG_ENABLE_PUBLIC",
+        "value": "${public_enabled}"
+      },
+      {
         "name": "APPCONFIG_PUBLIC_PROXY_URL",
         "value": "${public_url}"
+      },
+      {
+        "name": "APPCONFIG_ENABLE_OAI",
+        "value": "${oai_enabled}"
       },
       {
         "name": "APPCONFIG_OAI_PROXY_URL",

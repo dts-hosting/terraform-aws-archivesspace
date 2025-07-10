@@ -118,6 +118,10 @@ variable "network_mode" {
   default = "awsvpc"
 }
 
+variable "oai_enabled" {
+  default = null
+}
+
 variable "placement_strategies" {
   default = {
     pack-by-memory = {

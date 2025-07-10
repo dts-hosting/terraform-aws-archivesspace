@@ -31,6 +31,7 @@ locals {
   mysql_img                = var.mysql_img
   name                     = var.name
   network_mode             = var.network_mode
+  oai_enabled              = coalesce(var.oai_enabled, local.public_enabled)
   oai_prefix               = local.public_prefix != "/" ? "${local.public_prefix}oai" : "/oai"
   placement_strategies     = var.placement_strategies
   proxy_img                = var.proxy_img
@@ -79,10 +80,12 @@ locals {
     mysql_img           = local.mysql_img
     name                = local.name
     network_mode        = local.network_mode
+    oai_enabled         = local.oai_enabled
     oai_prefix          = local.oai_prefix
     proxy_img           = local.proxy_img
     proxy_port          = local.proxy_port
     proxy_type          = local.proxy_type
+    public_enabled      = local.public_enabled
     public_hostname     = local.public_hostname
     public_prefix       = local.public_prefix
     public_url          = local.public_url
