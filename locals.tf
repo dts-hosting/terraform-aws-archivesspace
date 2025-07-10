@@ -39,8 +39,8 @@ locals {
   public_enabled           = var.public_enabled
   proxy_health_path        = local.db_migrate && !local.db_migrate_healthcheck ? "/health" : "/status" # "/health" is a canned response, always returning http status 200
   public_hostname          = local.public_enabled ? var.public_hostname : local.staff_hostname
-  public_ips_allowed       = local.public_enabled ? join("; ", formatlist("allow %s", var.public_ips_allowed)) : "allow 127.0.0.1/32"
-  public_prefix            = local.public_enabled ? var.public_prefix : "/disabled/"
+  public_ips_allowed       = join("; ", formatlist("allow %s", var.public_ips_allowed))
+  public_prefix            = var.public_prefix
   public_url               = trimsuffix("https://${local.public_hostname}${local.public_prefix}", "/")
   real_ip_cidr             = "10.0.0.0/16" # TODO: var
   requires_compatibilities = var.requires_compatibilities
