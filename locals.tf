@@ -48,6 +48,7 @@ locals {
   security_group_id        = var.security_group_id
   solr_url                 = var.solr_url
   staff_hostname           = var.staff_hostname
+  staff_ips_allowed        = join("; ", formatlist("allow %s", var.staff_ips_allowed))
   staff_prefix             = var.staff_prefix != "/" ? trimsuffix(var.staff_prefix, "/") : var.staff_prefix
   staff_url                = trimsuffix("https://${local.staff_hostname}${local.staff_prefix}", "/")
   subnets                  = var.subnets
@@ -98,6 +99,7 @@ locals {
     staff_hostname      = local.staff_hostname
     staff_prefix        = local.staff_prefix
     staff_url           = local.staff_url
+    sui_ips_allowed     = local.staff_ips_allowed
     swap_size           = local.swap_size
     timezone            = local.timezone
     upstream_host       = local.upstream_host
