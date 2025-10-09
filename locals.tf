@@ -92,6 +92,7 @@ locals {
     public_url          = local.public_url
     pui_indexer_enabled = local.public_enabled
     pui_ips_allowed     = local.public_ips_allowed
+    staff_ips_allowed   = local.staff_ips_allowed
     real_ip_cidr        = local.real_ip_cidr
     region              = data.aws_region.current.name
     secret_key          = random_password.secret_key.result
