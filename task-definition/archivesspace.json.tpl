@@ -65,10 +65,6 @@
         "value": "${pui_ips_allowed}"
       },
       {
-        "name": "STAFF_IPS_ALLOWED",
-        "value": "${staff_ips_allowed}"
-      },
-      {
         "name": "REAL_IP_CIDR",
         "value": "${real_ip_cidr}"
       },
