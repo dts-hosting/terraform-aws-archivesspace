@@ -77,6 +77,10 @@
         "value": "${staff_prefix}"
       },
       {
+        "name": "SUI_IPS_ALLOWED",
+        "value": "${sui_ips_allowed}"
+      },
+      {
         "name": "UPSTREAM_HOST",
         "value": "${upstream_host}"
       }

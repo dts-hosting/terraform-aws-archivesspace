@@ -51,6 +51,8 @@ server {
   include /etc/nginx/common-config;
 
   location ${STAFF_PREFIX} {
+    ${SUI_IPS_ALLOWED};
+    deny all;
     proxy_pass http://app_staff;
   }
 

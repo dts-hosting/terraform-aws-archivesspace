@@ -191,6 +191,11 @@ variable "subnets" {
   description = "Subnets"
 }
 
+variable "staff_ips_allowed" {
+  default     = ["0.0.0.0/0"]
+  description = "List of IP addresses (CIDR notation) allowed access to the SUI"
+}
+
 variable "swap_size" {
   default     = 2048
   description = "Swap size"
