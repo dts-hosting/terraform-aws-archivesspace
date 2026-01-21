@@ -16,7 +16,7 @@ locals {
   db_password_param        = var.db_password_param
   db_username              = data.aws_ssm_parameter.db_username.value
   db_username_param        = var.db_username_param
-  db_url                   = "jdbc:mysql://${local.db_host}:3306/${local.db_name}?useUnicode=true&characterEncoding=UTF-8&user=${local.db_username}&password=${local.db_password}&useSSL=false&allowPublicKeyRetrieval=true"
+  db_url                   = "jdbc:mysql://${local.db_host}:3306/${local.db_name}?useUnicode=true&characterEncoding=UTF-8&user=${local.db_username}&password=${local.db_password}&useSSL=true&allowPublicKeyRetrieval=true"
   efs_id                   = var.efs_id
   hostnames                = toset([local.public_hostname, local.staff_hostname])
   https_listener_arn       = var.https_listener_arn
