@@ -67,6 +67,11 @@ variable "db_password_param" {
   description = "ArchivesSpace db password SSM parameter name"
 }
 
+variable "db_use_ssl" {
+  default     = false
+  description = "Use the SSL db connection"
+}
+
 variable "db_username_param" {
   description = "ArchivesSpace db username SSM parameter name"
 }
