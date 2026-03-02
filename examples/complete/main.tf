@@ -324,7 +324,7 @@ module "alb" {
 
 module "efs" {
   source  = "terraform-aws-modules/efs/aws"
-  version = "2.1.0"
+  version = "2.2.0"
 
   # File system
   name      = local.name
@@ -389,7 +389,7 @@ module "efs" {
 
 module "ecs" {
   source  = "terraform-aws-modules/ecs/aws"
-  version = "7.3.0"
+  version = "7.3.1"
 
   cluster_name = local.name
 
