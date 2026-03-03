@@ -2,6 +2,7 @@ locals {
   assign_public_ip         = var.assign_public_ip
   arclight_url             = var.arclight_url
   capacity_provider        = var.capacity_provider
+  container_port           = coalesce(local.thruster_port, local.port)
   storage                  = var.storage
   cluster_id               = var.cluster_id
   cpu                      = var.cpu
@@ -25,6 +26,7 @@ locals {
   swap_size                = 2048
   tags                     = var.tags
   target_type              = var.target_type
+  thruster_port            = var.thruster_port
   timezone                 = var.timezone
   vpc_id                   = var.vpc_id
 
@@ -36,6 +38,7 @@ locals {
 
   task_config = {
     capacity_provider        = local.capacity_provider
+    container_port           = local.container_port
     custom_env_cfg           = local.custom_env_cfg
     custom_secrets_cfg       = local.custom_secrets_cfg
     arclight_url             = local.arclight_url
@@ -44,7 +47,7 @@ locals {
     memory                   = local.memory
     name                     = local.name
     network_mode             = local.network_mode
-    port                     = local.port
+    puma_port                = local.port
     rails_assume_ssl         = local.rails_assume_ssl
     rails_env                = local.rails_env
     rails_force_ssl          = local.rails_force_ssl

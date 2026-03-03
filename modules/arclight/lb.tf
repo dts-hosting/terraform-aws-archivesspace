@@ -1,5 +1,5 @@
 resource "aws_lb_target_group" "this" {
-  port                 = local.port
+  port                 = local.container_port
   protocol             = "HTTP"
   vpc_id               = local.vpc_id
   target_type          = local.target_type
