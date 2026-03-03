@@ -10,6 +10,14 @@
         "value": "${site}"
       },
       {
+        "name": "HTTP_PORT",
+        "value": "${container_port}"
+      },
+      {
+        "name": "PORT",
+        "value": "${puma_port}"
+      },
+      {
         "name": "RAILS_ASSUME_SSL",
         "value": "${rails_assume_ssl}"
       },
@@ -32,6 +40,10 @@
       {
         "name": "SOLR_URL",
         "value": "${solr_url}"
+      },
+      {
+        "name": "TARGET_PORT",
+        "value": "${puma_port}"
       }
     ],
     "secrets": [
@@ -42,7 +54,7 @@
     ],
     "portMappings": [
       {
-        "containerPort": ${port}
+        "containerPort": ${container_port}
       }
     ],
     %{ if capacity_provider == "EC2" }

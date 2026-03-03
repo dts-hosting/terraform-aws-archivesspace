@@ -32,7 +32,7 @@ resource "aws_ecs_service" "this" {
 
   load_balancer {
     container_name   = "arclight"
-    container_port   = local.port
+    container_port   = local.container_port
     target_group_arn = aws_lb_target_group.this.arn
   }
 

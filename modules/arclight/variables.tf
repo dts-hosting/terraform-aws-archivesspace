@@ -75,7 +75,7 @@ variable "placement_strategies" {
 }
 
 variable "port" {
-  description = "Arclight port"
+  description = "Arclight (puma) port"
   default     = 3000
 }
 
@@ -137,6 +137,11 @@ variable "tags" {
 
 variable "target_type" {
   default = "ip"
+}
+
+variable "thruster_port" {
+  description = "Arclight (thruster) port"
+  default     = 2000
 }
 
 variable "timezone" {
