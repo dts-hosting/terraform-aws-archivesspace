@@ -53,7 +53,7 @@ locals {
     rails_force_ssl          = local.rails_force_ssl
     rails_log_to_stdout      = local.rails_log_to_stdout
     rails_serve_static_files = local.rails_serve_static_files
-    region                   = data.aws_region.current.name
+    region                   = data.aws_region.current.region
     secret_key_base          = aws_ssm_parameter.secret_key_base.arn
     site                     = local.site
     solr_url                 = local.solr_url
