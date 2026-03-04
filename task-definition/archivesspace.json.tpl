@@ -193,6 +193,10 @@
       {
         "name": "TZ",
         "value": "${timezone}"
+      },
+      {
+        "name": "ECS_RESERVED_MEMORY",
+        "value": "256"
       }
     ],
     "secrets": [
