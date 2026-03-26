@@ -1,3 +1,4 @@
+#MULTI
 limit_req_zone $binary_remote_addr zone=waypoints_limit:16m rate=23r/s;
 
 upstream app_api {
@@ -24,7 +25,7 @@ server {
   include /etc/nginx/common-config;
 
   location = /public {
-    return 301 /public/;
+    return 301 https://${PUBLIC_NAME}${PUBLIC_PREFIX};
   }
 
   location ${PUBLIC_PREFIX} {
