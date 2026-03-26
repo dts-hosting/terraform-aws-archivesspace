@@ -1,5 +1,3 @@
-#SINGLE	
-
 limit_req_zone $binary_remote_addr zone=waypoints_limit:16m rate=23r/s;
 
 upstream app_api {
