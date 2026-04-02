@@ -389,7 +389,7 @@ module "efs" {
 
 module "ecs" {
   source  = "terraform-aws-modules/ecs/aws"
-  version = "7.3.1"
+  version = "7.5.0"
 
   cluster_name = local.name
 
@@ -412,7 +412,7 @@ module "ecs" {
 
 module "db" {
   source  = "terraform-aws-modules/rds/aws"
-  version = "7.1.0"
+  version = "7.2.0"
 
   identifier = local.name
 
