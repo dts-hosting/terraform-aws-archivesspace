@@ -25,6 +25,8 @@ server {
 
   ${REDIRECT_BLOCK}
 
+  ${ROOT_REDIRECT_BLOCK}
+
   location ${PUBLIC_PREFIX} {
     ${PUI_IPS_ALLOWED};
     deny all;
