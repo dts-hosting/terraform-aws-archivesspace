@@ -76,7 +76,7 @@ variable "placement_strategies" {
 
 variable "port" {
   description = "Arclight (puma) port"
-  default     = 3000
+  default     = 4000
 }
 
 variable "rails_assume_ssl" {
@@ -141,7 +141,7 @@ variable "target_type" {
 
 variable "thruster_port" {
   description = "Arclight (thruster) port"
-  default     = 2000
+  default     = 8080
 }
 
 variable "timezone" {
