@@ -2,8 +2,8 @@
 set -eu
 
 if [ "$PUBLIC_PREFIX" != "/" ]; then
-  REDIRECT_BLOCK="location = ${PUBLIC_PREFIX%/} { return 301 \$scheme://\$host$PUBLIC_PREFIX\$is_args\$args; }"
-  ROOT_REDIRECT_BLOCK="location = / { return 301 \$scheme://\$host$PUBLIC_PREFIX; }"
+  REDIRECT_BLOCK="rewrite ^${PUBLIC_PREFIX%/}$ $PUBLIC_PREFIX permanent;"
+  ROOT_REDIRECT_BLOCK="rewrite ^/$ $PUBLIC_PREFIX permanent;"
 else
   REDIRECT_BLOCK=""
   ROOT_REDIRECT_BLOCK=""
