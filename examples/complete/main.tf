@@ -160,7 +160,7 @@ module "vpc" {
 
 module "alb_sg" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "5.3.1"
+  version = "6.0.0"
 
   name        = "${local.name}-alb"
   description = "ALB security group"
@@ -195,7 +195,7 @@ module "alb_sg" {
 
 module "archivesspace_sg" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "5.3.1"
+  version = "6.0.0"
 
   name        = "${local.name}-archivesspace"
   description = "Complete ArchivesSpace example security group"
