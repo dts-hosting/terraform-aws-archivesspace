@@ -1,4 +1,7 @@
 limit_req_zone $binary_remote_addr zone=waypoints_limit:16m rate=23r/s;
+limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=pdf_limit:10m rate=2r/m;
+limit_req_zone $binary_remote_addr zone=search_limit:10m rate=30r/m;
 
 upstream app_api {
   server ${UPSTREAM_HOST}:8089;
@@ -23,6 +26,10 @@ server {
   set_real_ip_from ${REAL_IP_CIDR};
   include /etc/nginx/common-config;
 
+  if ($query_string ~* ".{1500}") {
+    return 400;
+  }
+
   location ${PUBLIC_PREFIX} {
     ${PUI_IPS_ALLOWED};
     deny all;
@@ -31,6 +38,33 @@ server {
 
   location ~* (wp-admin|wp-includes|wp-content|xmlrpc\.php|wp-login\.php|wp-config\.php|wp-cron\.php|wp-trackback\.php|wp-comments-post\.php|wp-links-opml\.php) {
       deny all;
+  }
+
+  # Block file extensions ArchivesSpace never serves
+  location ~* \.(php|asp|aspx|cgi)$ {
+    return 404;
+  }
+
+  # Block known scanner and exploit paths
+  location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf) {
+    return 403;
+  }
+
+  # Block JSF and Java path traversal attempts
+  location ~* (javax\.faces\.resource|WEB-INF|META-INF) {
+    return 403;
+  }
+
+  # Rate-limit search (hits Solr; targeted heavily by injection probes)
+  location ~* ^/(advanced_)?search {
+    limit_req zone=search_limit burst=20 nodelay;
+    proxy_pass http://app_public;
+  }
+
+  # Rate-limit PDF generation (CPU-intensive endpoint)
+  location ~ ^/repositories/[0-9]+/resources/[0-9]+/pdf$ {
+    limit_req zone=pdf_limit burst=4 nodelay;
+    proxy_pass http://app_public;
   }
 
   location ~ ^/repositories/\d+/resources/\d+/infinite/waypoints {
@@ -49,6 +83,33 @@ server {
   server_name ${STAFF_NAME};
   set_real_ip_from ${REAL_IP_CIDR};
   include /etc/nginx/common-config;
+
+  if ($query_string ~* ".{1500}") {
+    return 400;
+  }
+
+  # Block file extensions ArchivesSpace never serves
+  location ~* \.(php|asp|aspx|cgi)$ {
+    return 404;
+  }
+
+  # Block known scanner and exploit paths
+  location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf) {
+    return 403;
+  }
+
+  # Block JSF and Java path traversal attempts
+  location ~* (javax\.faces\.resource|WEB-INF|META-INF) {
+    return 403;
+  }
+
+  # Rate-limit staff login to slow brute force attempts
+  location = /staff/login {
+    limit_req zone=login_limit burst=10 nodelay;
+    ${SUI_IPS_ALLOWED};
+    deny all;
+    proxy_pass http://app_staff;
+  }
 
   location ${STAFF_PREFIX} {
     ${SUI_IPS_ALLOWED};
