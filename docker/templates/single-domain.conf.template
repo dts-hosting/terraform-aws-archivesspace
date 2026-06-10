@@ -59,14 +59,16 @@ server {
     proxy_pass http://app_staff;
   }
 
-  # Rate-limit search (hits Solr; targeted heavily by injection probes)
-  location ~* ^/(advanced_)?search {
+  # Rate-limit public search (hits Solr; targeted heavily by injection probes)
+  # Anchored to the public prefix so staff routes (e.g. the linker's
+  # /search.json) are not captured and misrouted to app_public.
+  location ~* ^${PUBLIC_PREFIX}(advanced_)?search {
     limit_req zone=search_limit burst=20 nodelay;
     proxy_pass http://app_public;
   }
 
-  # Rate-limit PDF generation (CPU-intensive endpoint)
-  location ~ ^/repositories/[0-9]+/resources/[0-9]+/pdf$ {
+  # Rate-limit public PDF generation (CPU-intensive endpoint)
+  location ~ ^${PUBLIC_PREFIX}repositories/[0-9]+/resources/[0-9]+/pdf$ {
     limit_req zone=pdf_limit burst=4 nodelay;
     proxy_pass http://app_public;
   }
