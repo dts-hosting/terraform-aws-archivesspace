@@ -53,6 +53,10 @@
         "value": "${proxy_type}"
       },
       {
+        "name": "PUBLIC_ENABLED",
+        "value": "${public_enabled}"
+      },
+      {
         "name": "PUBLIC_NAME",
         "value": "${public_hostname}"
       },
