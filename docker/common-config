@@ -38,16 +38,54 @@ proxy_set_header        X-Real-IP          $remote_addr;
 real_ip_header    X-Forwarded-For;
 real_ip_recursive on;
 
+# TLS is terminated upstream (ALB) and nginx listens on plain HTTP:4000, so
+# absolute redirects would leak the wrong scheme/port (http://host:4000/...)
+# and time out. Emit relative redirects to keep clients on the https origin.
+# fixes /public timeouts
+absolute_redirect off;
+
 send_timeout  300s;
 sendfile      on;
-server_tokens on;
+server_tokens off;
 
 tcp_nopush  on;
 tcp_nodelay on;
 
+proxy_cookie_flags ~ ".*" samesite=lax secure;
+
+location ^~ /_ {
+  return 403;
+  access_log off;
+}
+
 location /health {
   default_type text/html;
   return 200 "<!DOCTYPE html><h1>Not too bad!</h1>\n";
+  access_log off;
+}
+
+location ^~ /.well-known/ {
+  return 404;
+  access_log off;
+}
+
+location = /favicon.ico {
+  return 404;
+  access_log off;
+}
+
+location = /apple-touch-icon.png {
+  return 404;
+  access_log off;
+}
+
+location = /apple-touch-icon-precomposed.png {
+  return 404;
+  access_log off;
+}
+
+location ~* /\. {
+  return 404;
   access_log off;
 }
 

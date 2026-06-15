@@ -9,6 +9,7 @@ services:
       API_PREFIX: "/api/"
       OAI_PREFIX: "/oai"
       PROXY_TYPE: "single"
+      PUBLIC_ENABLED: "true"
       PUBLIC_NAME: "archivesspace-ex-complete.lyrtech.org"
       PUBLIC_PREFIX: "/"
       PUI_IPS_ALLOWED: "allow 0.0.0.0/0"

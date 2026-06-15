@@ -4,6 +4,7 @@ ENV API_IPS_ALLOWED="allow 0.0.0.0/0" \
     API_PREFIX="/api/" \
     OAI_PREFIX="/oai" \
     PROXY_TYPE="single" \
+    PUBLIC_ENABLED="false" \
     PUBLIC_NAME="" \
     PUBLIC_PREFIX="/" \
     PUI_IPS_ALLOWED="allow 0.0.0.0/0" \
