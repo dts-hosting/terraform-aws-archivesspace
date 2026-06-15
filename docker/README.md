@@ -27,7 +27,8 @@ To also push to ECR install the [ecr credentials helper](https://github.com/awsl
 Then set these envvars:
 
 ```
-export AWS_PROFILE=archivesspace # set the profile name
-export ASPACE_PROXY_ECR_IMG=513816696638.dkr.ecr.us-west-2.amazonaws.com/archivesspace:proxy # set img
-./build_and_push.sh
+aws ecr get-login-password --region us-west-2 --profile archivesspace \
+  | docker login --username AWS --password-stdin 513816696638.dkr.ecr.us-west-2.amazonaws.com \
+&& docker build --no-cache -t 513816696638.dkr.ecr.us-west-2.amazonaws.com/archivesspace:proxy . \
+&& docker push 513816696638.dkr.ecr.us-west-2.amazonaws.com/archivesspace:proxy
 ```
