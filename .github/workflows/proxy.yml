@@ -29,5 +29,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ./docker
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: lyrasis/aspace-proxy:${{ github.ref_name == 'main' && 'latest' || github.ref_name }}

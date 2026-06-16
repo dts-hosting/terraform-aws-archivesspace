@@ -7,6 +7,15 @@ resource "aws_ecs_task_definition" "this" {
   execution_role_arn       = local.iam_ecs_task_role_arn
   task_role_arn            = local.iam_ecs_task_role_arn
 
+  dynamic "runtime_platform" {
+    for_each = local.cpu_architecture == null ? [] : [1]
+
+    content {
+      operating_system_family = "LINUX"
+      cpu_architecture        = local.cpu_architecture
+    }
+  }
+
   ephemeral_storage {
     size_in_gib = local.storage
   }

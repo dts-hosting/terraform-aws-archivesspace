@@ -57,6 +57,25 @@ requires_compatibilities = ["FARGATE"]
 target_type              = "ip"
 ```
 
+### CPU architecture
+
+`cpu_architecture` defaults to `null`, which omits the `runtime_platform` block
+from the task definition. This keeps existing deployments unchanged and lets an
+ECS/EC2 capacity provider select the matching image from a multiarch repo based
+on the container instance type — Graviton instances pull `arm64`, x86 instances
+pull `amd64`, with no explicit configuration. On Fargate, an unset architecture
+defaults to `X86_64`.
+
+To pin the architecture explicitly:
+
+```hcl
+cpu_architecture = "ARM64"
+```
+
+Valid values are `X86_64` and `ARM64`. Setting this is typically only needed to
+run on ARM64 under Fargate (use Linux platform version `1.4.0` or later); for
+ECS/EC2, prefer leaving it unset so instance type drives image selection.
+
 ### Listeners
 
 The `https_listener_arn` routes traffic to ArchivesSpace.

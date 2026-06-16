@@ -22,6 +22,9 @@ UPSTREAM_HOST=app docker compose up
 ./build_and_push.sh
 ```
 
+The publish script uses Docker Buildx and always publishes a multi-architecture
+image for `linux/amd64` and `linux/arm64`.
+
 To also push to ECR install the [ecr credentials helper](https://github.com/awslabs/amazon-ecr-credential-helper?tab=readme-ov-file#installing).
 
 Then set these envvars:

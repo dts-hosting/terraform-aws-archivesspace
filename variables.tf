@@ -35,6 +35,16 @@ variable "cpu" {
   description = "Task level CPU allocation"
 }
 
+variable "cpu_architecture" {
+  default     = null
+  description = "ECS task CPU architecture. Valid values are X86_64 and ARM64. Leave null (default) to omit runtime_platform: ECS/EC2 selects the matching image from a multiarch repo per instance type, and Fargate defaults to X86_64. Set explicitly (typically ARM64) for Fargate on Graviton."
+
+  validation {
+    condition     = var.cpu_architecture == null || contains(["X86_64", "ARM64"], var.cpu_architecture)
+    error_message = "cpu_architecture must be either X86_64 or ARM64."
+  }
+}
+
 variable "custom_env_cfg" {
   default     = {}
   description = "General environment name/value configuration"
