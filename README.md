@@ -57,6 +57,25 @@ requires_compatibilities = ["FARGATE"]
 target_type              = "ip"
 ```
 
+### CPU architecture
+
+`cpu_architecture` defaults to `null`, which omits the `runtime_platform` block
+from the task definition. This keeps existing deployments unchanged and lets an
+ECS/EC2 capacity provider select the matching image from a multiarch repo based
+on the container instance type — Graviton instances pull `arm64`, x86 instances
+pull `amd64`, with no explicit configuration. On Fargate, an unset architecture
+defaults to `X86_64`.
+
+To pin the architecture explicitly:
+
+```hcl
+cpu_architecture = "ARM64"
+```
+
+Valid values are `X86_64` and `ARM64`. Setting this is typically only needed to
+run on ARM64 under Fargate (use Linux platform version `1.4.0` or later); for
+ECS/EC2, prefer leaving it unset so instance type drives image selection.
+
 ### Listeners
 
 The `https_listener_arn` routes traffic to ArchivesSpace.
@@ -78,3 +97,36 @@ task_memory = 3072 # allocation for task (all containers)
 ```
 
 When running on Fargate the `task_memory` needs to equal a [compatible value](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html).
+
+## Development
+
+Install [mise](https://mise.jdx.dev/installing-mise.html) then run:
+
+```bash
+mise trust
+mise install # Biome, Lefthook, Node, Terraform, ECR credential helper
+mise run hooks # if you want git hooks
+```
+
+### Tasks
+
+List the available tasks:
+
+```bash
+mise tasks
+```
+
+Build and push the multiarch [Nginx proxy](./docker/README.md) image
+(`linux/amd64` + `linux/arm64`):
+
+```bash
+mise run build
+# set ASPACE_PROXY_ECR_IMG to also push to ECR (see docker/README.md)
+```
+
+Check / fix formatting (Biome for `scripts`, Terraform fmt):
+
+```bash
+mise run lint
+mise run lint-fix
+```

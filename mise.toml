@@ -1,0 +1,26 @@
+[tools]
+amazon-ecr-credential-helper = "latest"
+biome = "2"
+lefthook = "1"
+node = "24"
+terraform = "1.14.4"
+
+[tasks.build]
+description = "Build and push the multiarch aspace-proxy docker image (ASPACE_PROXY_ECR_IMG to also push to ECR)"
+run = 'node scripts/build.mjs'
+
+[tasks.help]
+description = "List available tasks"
+run = 'mise tasks'
+
+[tasks.hooks]
+description = "Install lefthook git hooks"
+run = 'lefthook install'
+
+[tasks.lint]
+description = "Check task scripts (biome) and terraform formatting"
+run = ['biome check scripts', 'terraform fmt -check -recursive']
+
+[tasks.lint-fix]
+description = "Apply biome and terraform formatting fixes"
+run = ['biome check --write scripts', 'terraform fmt -recursive']

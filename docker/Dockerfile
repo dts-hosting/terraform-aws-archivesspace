@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 nginx
+FROM nginx
 
 ENV API_IPS_ALLOWED="allow 0.0.0.0/0" \
     API_PREFIX="/api/" \

@@ -6,6 +6,7 @@ locals {
   capacity_provider        = var.capacity_provider
   cluster_id               = var.cluster_id
   cpu                      = var.cpu
+  cpu_architecture         = var.cpu_architecture
   custom_env_cfg           = var.custom_env_cfg
   custom_secrets_cfg       = var.custom_secrets_cfg
   db_host                  = var.db_host
