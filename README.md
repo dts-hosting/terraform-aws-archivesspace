@@ -97,3 +97,36 @@ task_memory = 3072 # allocation for task (all containers)
 ```
 
 When running on Fargate the `task_memory` needs to equal a [compatible value](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html).
+
+## Development
+
+Install [mise](https://mise.jdx.dev/installing-mise.html) then run:
+
+```bash
+mise trust
+mise install # Biome, Lefthook, Node, Terraform, ECR credential helper
+mise run hooks # if you want git hooks
+```
+
+### Tasks
+
+List the available tasks:
+
+```bash
+mise tasks
+```
+
+Build and push the multiarch [Nginx proxy](./docker/README.md) image
+(`linux/amd64` + `linux/arm64`):
+
+```bash
+mise run build
+# set ASPACE_PROXY_ECR_IMG to also push to ECR (see docker/README.md)
+```
+
+Check / fix formatting (Biome for `scripts`, Terraform fmt):
+
+```bash
+mise run lint
+mise run lint-fix
+```

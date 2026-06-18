@@ -6,14 +6,13 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-    # https://github.com/marketplace/actions/hashicorp-setup-terraform
-    - uses: hashicorp/setup-terraform@v4
-      with:
-        terraform_version: 1.4.2
+      - uses: jdx/mise-action@v4
+        with:
+          cache: true
 
-    - name: Terraform fmt
-      run: terraform fmt -check -recursive
+      - name: Lint
+        run: mise run lint

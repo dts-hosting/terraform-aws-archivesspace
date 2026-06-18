@@ -1,0 +1,7 @@
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      run: biome check scripts
+    terraform:
+      run: terraform fmt -check -recursive
