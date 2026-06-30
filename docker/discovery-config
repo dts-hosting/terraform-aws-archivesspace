@@ -1,0 +1,266 @@
+# =============================================================================
+# discovery-config -- shared hardening for PUBLIC discovery/browse/search
+# =============================================================================
+#
+# WHAT THIS IS
+#   An nginx snippet `include`d (via `include /etc/nginx/discovery-config;`) into
+#   the public faceted-browse and search `location` blocks of both the
+#   single-domain and multi-domain proxy templates. It is intentionally applied
+#   ONLY to the public discovery surface (the PUI). It is never included in the
+#   staff (:8080), API (:8089) or OAI (:8082) locations -- those are
+#   IP-restricted and out of scope for this protection by design.
+#
+# WHY IT EXISTS (incident background)
+#   ArchivesSpace's faceted browse + search endpoints fan out to Solr AND the
+#   backend database. The hosting fleet is multi-tenant: many sites share one
+#   RDS instance (e.g. db-shared-p2 backs ~159 tenants). So an abusive crawl on
+#   ONE site can saturate the shared database and degrade every co-tenant on it
+#   -- exactly what was observed when a small (medium-spec) tenant's JVM OOM'd
+#   under a distributed crawl and the shared DB slowed down for unrelated sites.
+#
+#   Observed attack shapes this defends against:
+#     1. Distributed residential "match-all" crawl -- hundreds of IPs, each at a
+#        low rate (so per-IP rate limits alone do NOT catch it), enumerating
+#        every facet combination. Fingerprint: double-encoded wildcard %252A.
+#     2. Single-IP SQL-injection scanners (sqlmap) firing thousands of probes at
+#        the search/browse params, throwing backend errors and exploding logs.
+#     3. Single-IP match-all enumeration crawlers paging to page=999.
+#
+# DESIGN PRINCIPLE
+#   No single signature catches all three, so this is a LAYERED defense:
+#   concurrency caps (robust to many-IP swarms) + signature throttles + a
+#   query-string SQLi block + a micro-cache that also serves stale during
+#   backend distress. Each layer is tuned to leave normal human browsing
+#   untouched (the original requirement: do not break real users).
+#
+# NGINX EXECUTION NOTE
+#   nginx does not run these directives top-to-bottom like a script; each belongs
+#   to a processing phase (rewrite/`if` -> access/limit -> content/proxy). The
+#   ordering below is for human readability. The two `return` statements
+#   (SQLi 403, deep-page 404) short-circuit in the rewrite phase before any
+#   upstream connection is made, so blocked requests never reach the backend.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 1. CONCURRENCY CAPS  (the core shared-DB protection)
+# -----------------------------------------------------------------------------
+# limit_conn bounds how many requests are IN FLIGHT simultaneously, which is the
+# right tool here: it caps backend/DB load directly and is unaffected by how many
+# source IPs the attacker rotates through. Zones are defined in the templates
+# (limit_conn_zone). A normal discovery request completes in well under a second,
+# so these ceilings are far above real concurrent human demand.
+
+# Per-IP: how many simultaneous discovery requests one source IP may hold.
+# Raised to 24 (from an initial 6) to be friendly to NAT'd institutions: many of
+# these sites' users sit behind a single campus/library egress IP, so a value
+# that assumed "one IP = one user" would throttle a whole building. 24 concurrent
+# in-flight searches from one IP is still well above any single human while
+# preventing absurd parallel hammering.
+limit_conn discovery_perip 24;
+
+# Per-tenant circuit breaker: max concurrent discovery requests for the WHOLE
+# site (zone keyed on $server_name = one bucket per server). This is what stops a
+# crawl on this tenant from monopolizing the shared database -- excess concurrent
+# requests are shed rather than piling onto the backend. The value is templated
+# via ${DISCOVERY_MAX_CONN} (Dockerfile default 48) so it can be scaled per
+# instance_spec from Terraform: a busy xlarge tenant can be given a higher
+# ceiling than a small medium one. This is the first knob to raise if legitimate
+# peak load (a class assignment, a viral collection, a news event) returns 503.
+limit_conn discovery_total ${DISCOVERY_MAX_CONN};
+
+# Return 503 (Service Unavailable, retryable) when either cap is exceeded. 503 is
+# already nginx's default for limit_conn, so this is explicit-for-clarity and
+# pins the behavior against a future default change. Combined with
+# proxy_cache_use_stale below, clients usually get a cached page instead of a 503.
+limit_conn_status 503;
+
+
+# -----------------------------------------------------------------------------
+# 2. SQL-INJECTION BLOCK  (sqlmap-style probes -> 403)
+# -----------------------------------------------------------------------------
+# Drops obvious SQLi probes at the edge so they never reach the app. This both
+# blocks the attack and stops the log explosion: at vcu/montclair these probes
+# trigger backend ArgumentError/500s whose multi-line stack traces ballooned the
+# logs to millions of lines in minutes.
+#
+# Matched against $args (the raw, still-URL-encoded query string), case-
+# insensitively. The patterns are SQL function-call / syntax shapes that do not
+# occur in legitimate archival search text, which keeps false positives near
+# zero. Note the SHAPES, not bare words:
+#   sleep( sysdate( benchmark( pg_sleep   -> time-based blind injection
+#   extractvalue updatexml                -> error-based injection (MySQL)
+#   select(                               -> subselect like (select(0)from...)
+#   union <sep> select                    -> UNION-based injection
+#   information_schema                    -> schema enumeration
+#   /*                                    -> inline SQL comment evasion
+# Because we require a "(" after select/sleep/etc., ordinary searches such as
+# "select committee" or "labor union papers" do NOT match (verified by test).
+#
+# `if` with only a `return` is the documented-safe use of `if` in a location
+# (the "if is evil" caveat applies to `if` blocks that set directives, not to a
+# bare return). It runs in the rewrite phase, before proxying.
+#
+# PATTERN NOTES (tuned to minimize false positives for archival search text):
+#   sleep( sysdate( benchmark( pg_sleep(   time-based blind injection
+#   extractvalue( updatexml(               error-based injection (MySQL)
+#   waitfor ...delay                       MSSQL time-based (require "delay" so a
+#                                          title like "WaitForIt" does NOT match)
+#   select <spaces> ( <spaces> select|digit  subselect like select(0)from(select(
+#                                          -- requires "(" then a digit/subselect,
+#                                          so "select committee" / "select (works)"
+#                                          do NOT match
+#   information_schema                     schema enumeration
+#   into ...outfile                        file-write injection
+# Deliberately DROPPED the earlier "union\s+select" pattern: it matched ordinary
+# phrases common in this fleet's collections ("trade union select committee",
+# "labor union selected papers"). The observed sqlmap attacks (vcu/montclair) all
+# carried sleep()/sysdate()/select(0)/waitfor delay, which the above still catch.
+if ($args ~* "(sleep\(|sysdate\(|benchmark\(|pg_sleep\(|waitfor(\s|%20|\+)+delay|extractvalue\(|updatexml\(|select(\s|%20|\+)*\((\s|%20)*(select|[0-9])|information_schema|into(\s|%20|\+)+outfile)") {
+  return 403;
+}
+
+# Out-of-band (OOB) interaction + code-injection probes. A second, complementary
+# signature added after a single-IP commercial scanner (Acunetix/sqlmap-style) hit
+# the `utah` site with ~41k requests in an hour. The time-based block above caught
+# its sleep()/sysdate()/select(0) payloads, but it carried two whole families that
+# block did NOT match:
+#   1. OOB callback exfiltration -- payloads that try to make the server phone home
+#      to an attacker-controlled domain (the canary that the injection executed):
+#        bxss.me            Acunetix's OOB domain (seen ~9.4k times here)
+#        *.oast.* oastify   interactsh / Burp Collaborator hosted OOB
+#        burpcollaborator   Burp Collaborator
+#        interact.sh        interactsh
+#   2. Ruby code injection / SSTI -- ArchivesSpace IS a Rails app, so the scanner
+#      tries actual Ruby: require'socket' / Socket.gethostbyname(...) (used to do
+#      the DNS callback above). `require[^&]{0,3}socket` tolerates the quote/encoding
+#      between the two tokens (require'socket', require%27socket, require"socket").
+# Also catches the n*n= boolean-SQLi shape (e.g. "5*5=25") used in OR-based blind
+# probes, which the time-based block does not. None of these tokens occur in real
+# archival search text (verified against legitimate queries + the sampled logs), so
+# false-positive risk is ~nil. Net-new coverage on the utah attack: ~6.9k requests
+# 403'd that would otherwise have reached the backend (and flooded the logs with
+# 500/502 stack traces). NOTE: scoped to the discovery surface like the rest of
+# this snippet; if root-level (`/?param=...`) injection becomes a concern, promote
+# this signature to a server-scope `if`.
+if ($args ~* "(bxss\.me|\.oast\.|oastify|burpcollaborator|interact\.sh|Socket\.gethostbyname|require[^&]{0,3}socket|[0-9]+\*[0-9]+(\s|%20|\+)*=)") {
+  return 403;
+}
+
+
+# -----------------------------------------------------------------------------
+# 3. PER-IP REQUEST-RATE LIMIT  (general single-IP flood control)
+# -----------------------------------------------------------------------------
+# search_limit is defined in the templates as 30 requests/minute per IP. With
+# burst=20 nodelay, a client may make a quick burst of 20 and then is held to
+# 30/min. A human clicking through facets/results stays far under this; a single
+# aggressive scanner hitting the same endpoints (e.g. dayton's 2600/min from one
+# IP) is throttled hard to 30/min. `nodelay` serves the burst immediately rather
+# than queuing it, then rejects excess with 503.
+limit_req zone=search_limit burst=20 nodelay;
+
+
+# -----------------------------------------------------------------------------
+# 4. DOUBLE-ENCODED WILDCARD THROTTLE  (distributed-crawl fingerprint)
+# -----------------------------------------------------------------------------
+# The distributed residential crawl is identifiable because it double-encodes the
+# match-all wildcard: it scrapes an href containing "%2A" (an encoded "*") and
+# then URL-encodes the whole thing again, yielding "%252A". The ArchivesSpace PUI
+# itself only ever emits "%2A", and across 14 sampled sites legitimate traffic
+# produced "%252A" zero times -- so this is a near-certain bot signature with
+# effectively no false positives.
+#
+# The doubleenc_limit zone (defined in the templates) is keyed GLOBALLY -- every
+# request carrying the %252A signature shares ONE bucket, regardless of source
+# IP. That is deliberate: the swarm rotates across hundreds of IPs at a low
+# per-IP rate, so a per-IP limit would never trigger; a global bucket throttles
+# the swarm in aggregate. burst=5 absorbs a tiny spike, then the zone's rate
+# (30/min) caps it. This is a throttle, not a ban -- excess gets 503 and can
+# retry; it does not block the ~handful of normally-encoded match-all requests.
+limit_req zone=doubleenc_limit burst=5 nodelay;
+
+
+# -----------------------------------------------------------------------------
+# 5. DEEP-PAGINATION THROTTLE  (bot-only deep offsets)
+# -----------------------------------------------------------------------------
+# Deep-offset pagination (page >= 100) is the most expensive query shape for
+# Solr/DB (it must walk the full offset) and sampled traffic at that depth was
+# essentially all crawlers (page=205, 999, 115722, ...).
+#
+# IMPORTANT -- why this is a THROTTLE, not a hard 404: the PUI pagination control
+# (_pagination.html.erb) renders a clickable "last page" link, so a legitimate
+# user on a large collection (>100 pages of results) can and will click into
+# page >= 100. A hard 404 would break that real interaction. A Referer exemption
+# was rejected because the observed crawlers send same-site Referers (so it would
+# not distinguish them) while some send none at all.
+#
+# Instead we rate-limit: the deeppage_limit zone (templates) is keyed PER IP and
+# is set so a human clicking "last" / paging near the end (a handful of requests)
+# passes within the burst, while sequential enumeration of hundreds of deep pages
+# from one IP is throttled to a trickle. The distributed many-IP swarm's deep
+# pages are additionally covered by the %252A throttle and the concurrency caps.
+limit_req zone=deeppage_limit burst=10 nodelay;
+
+
+# -----------------------------------------------------------------------------
+# 6. PER-CONNECTION BANDWIDTH CAP  (slow bulk scraping)
+# -----------------------------------------------------------------------------
+# Caps throughput to 1 MB/s PER CONNECTION, but only AFTER the first 512 KB has
+# been sent. Discovery pages are only a few KB, so a normal response transfers
+# entirely within the 512 KB grace and is never slowed; the cap only bites on
+# unexpectedly large/streamed responses, mildly slowing bulk extraction without
+# affecting any normal page view.
+limit_rate_after 512k;
+limit_rate 1m;
+
+
+# -----------------------------------------------------------------------------
+# 7. MICRO-CACHE  (offload + availability)
+# -----------------------------------------------------------------------------
+# Caches discovery responses briefly. Two benefits: (a) repeated facet/browse
+# queries are served from cache instead of recomputing against Solr+DB; (b) via
+# proxy_cache_use_stale, nginx keeps serving the last good copy when the backend
+# errors, times out, or is restarting -- this is what prevents the 502 storms
+# seen when the app OOMs. The cache zone/path (aspace_cache) is defined in the
+# templates. Effectiveness is best-effort: responses that carry a Set-Cookie are
+# not stored by nginx's defaults, so hit rate depends on the PUI's cookie
+# behavior -- verify with the X-Cache-Status header after deploy.
+proxy_cache aspace_cache;
+
+# Only GET/HEAD are cacheable; POST (e.g. request-cart submits) always passes
+# through to the backend.
+proxy_cache_methods GET HEAD;
+
+# Cache key: scheme + host + full request URI (incl. query string), so each
+# distinct facet combination is cached separately and shared across clients.
+proxy_cache_key "$scheme$host$request_uri";
+
+# TTLs: successful pages and redirects cached 60s; 404s cached 30s. Archival data
+# changes rarely, so these short TTLs are conservative -- they could be raised to
+# reduce backend load further if desired.
+proxy_cache_valid 200 301 302 60s;
+proxy_cache_valid 404 30s;
+
+# Do not serve-from / store-into cache for authenticated sessions.
+# $aspace_skip_cache (set in the templates' map) is 1 when a *_session cookie is
+# present, covering request-cart / staff-preview flows.
+proxy_cache_bypass $aspace_skip_cache;
+proxy_no_cache $aspace_skip_cache;
+
+# Thundering-herd control: when many clients request the same uncached URL at
+# once (exactly what a swarm does), only the FIRST populates the cache entry; the
+# rest wait up to 10s for it instead of all stampeding the backend.
+proxy_cache_lock on;
+proxy_cache_lock_timeout 10s;
+
+# Resilience: serve a stale cached copy if the backend errors, times out, is
+# updating, or returns 5xx -- so a backend hiccup/OOM yields a slightly stale
+# page rather than an error. background_update refreshes the entry asynchronously
+# so the user is never blocked on the refresh.
+proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+proxy_cache_background_update on;
+
+# Expose cache result (HIT/MISS/STALE/BYPASS) for validation/tuning. Harmless to
+# leave in place; remove once cache behavior is confirmed in production if you'd
+# rather not advertise it.
+add_header X-Cache-Status $upstream_cache_status always;
