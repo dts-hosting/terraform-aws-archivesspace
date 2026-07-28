@@ -1,98 +1,40 @@
 limit_req_zone $binary_remote_addr zone=waypoints_limit:16m rate=23r/s;
 limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
 limit_req_zone $binary_remote_addr zone=pdf_limit:10m rate=2r/m;
-# search_limit raised 30r/m -> 120r/m so a NAT'd institution (many users behind
-# one egress IP) is not throttled as if it were a single user. 120r/m (2r/s) with
-# the burst set at the location still throttles a single-IP scanner hard.
+# Raised 30r/m -> 120r/m so a NAT'd institution isn't throttled as if it were a single user.
 limit_req_zone $binary_remote_addr zone=search_limit:10m rate=120r/m;
 
-# =============================================================================
-# Public-side anti-abuse zones/maps (http context).
-#
-# Everything below defines the shared-memory zones and request-classifying maps
-# used by the public discovery rules. The directives that actually enforce them
-# live in the public `location` blocks (mostly via `include discovery-config`).
-# All of this is HTTP-CONTEXT only -- limit_req_zone/limit_conn_zone/proxy_cache_
-# path/map are not valid inside server{} or location{}, which is why they sit
-# here at the top of the rendered conf.d file rather than in common-config (which
-# is included at server scope).
-#
-# NOTE ON $... VARIABLES + envsubst: docker-entrypoint.sh runs envsubst with an
-# explicit allow-list of ${...} template vars. nginx runtime variables used here
-# ($binary_remote_addr, $server_name, $args, $arg_page, $http_cookie, and the
-# $aspace_* vars defined by the maps) are NOT in that list, so envsubst leaves
-# them intact for nginx to evaluate at request time.
-# =============================================================================
+# Public-side anti-abuse zones/maps (http context only); enforced in the public location blocks via discovery-config.
 
-# --- Concurrency caps for discovery/browse (enforced by `limit_conn` in
-# discovery-config). limit_conn bounds simultaneous in-flight requests, which is
-# what protects the SHARED backend database: it is independent of how many source
-# IPs an attacker rotates through. The :10m is the shared-memory size for tracking
-# state (~160k unique keys per 10m), not a limit value.
-
-# Keyed per client IP -> caps how many discovery requests one IP holds at once.
+# Per-IP cap on simultaneous in-flight discovery requests.
 limit_conn_zone $binary_remote_addr zone=discovery_perip:10m;
-# Keyed on $server_name -> effectively ONE bucket for the whole tenant (in this
-# single-domain template server_name is "_"), giving a per-site circuit breaker
-# on total concurrent discovery load against the shared DB.
+# One bucket for the whole tenant (server_name is "_" here), a per-site circuit breaker on the shared DB.
 limit_conn_zone $server_name        zone=discovery_total:10m;
 
-# --- Micro-cache storage for discovery responses. Per CONTAINER (each tenant's
-# proxy has its own nginx + cache). levels=1:2 = two-tier dir fanout; keys_zone
-# aspace_cache:16m holds ~130k cache keys in memory; max_size=512m caps on-disk
-# cache; inactive=10m evicts entries unread for 10 minutes; use_temp_path=off
-# writes straight into the cache tree (avoids a cross-device temp copy). The
-# cache directory (/var/cache/nginx/aspace) is created automatically by the nginx
-# master on startup. Caching behavior (TTLs, bypass, stale) is set in
-# discovery-config.
+# Micro-cache storage for discovery responses; TTLs/bypass/stale behavior set in discovery-config.
 proxy_cache_path /var/cache/nginx/aspace levels=1:2 keys_zone=aspace_cache:16m max_size=512m inactive=10m use_temp_path=off;
 
-# --- Cache-bypass classifier: 1 when the request carries any *_session cookie,
-# so authenticated flows (request-cart, staff preview) are never served from or
-# stored in the shared cache. Consumed by proxy_cache_bypass/proxy_no_cache.
+# Cache-bypass classifier: skip the shared cache for any request carrying a *_session cookie.
 map $http_cookie $aspace_skip_cache {
   default      0;
   "~*_session" 1;
 }
 
-# --- Distributed-crawl fingerprint: the swarm double-encodes the match-all
-# wildcard (q[]=%252A) because it re-encodes scraped hrefs; the PUI only ever
-# emits %2A, and sampled real traffic produced %252A zero times. The map yields a
-# CONSTANT key ("doubleenc") for matching requests and an EMPTY key otherwise --
-# nginx skips empty keys, so only flagged requests are counted, and because the
-# key is constant they all share ONE bucket. That global (not per-IP) bucket is
-# essential: the swarm is low-rate per IP, so only an aggregate cap can throttle
-# it. rate=30r/m is the aggregate ceiling; burst is applied in discovery-config.
+# Distributed-crawl fingerprint: the swarm double-encodes the match-all wildcard (q[]=%252A); real PUI traffic never does.
 map $args $aspace_doubleenc {
   default      "";
   "~*%252[Aa]" "doubleenc";
 }
 limit_req_zone $aspace_doubleenc zone=doubleenc_limit:10m rate=30r/m;
 
-# --- Deep-offset pagination throttle classifier + zone. The map yields the
-# client IP as the key when `page` has 3+ digits (>=100), else an empty key
-# (which limit_req skips). So deeppage_limit rate-limits ONLY deep-page requests,
-# PER IP. discovery-config applies it with a burst, so a human clicking the PUI's
-# "last page" link (a few deep requests) passes, while sequential enumeration of
-# hundreds of deep pages from one IP is throttled. (Was previously a hard 404,
-# which broke the legitimate "last page" link on large collections.) Adjust the
-# digit threshold in the map and the rate here to retune.
+# Deep-offset pagination (page>=100) throttle, keyed per IP so a human's "last page" click still passes.
 map $arg_page $aspace_deep_page {
   default        "";
   "~^[0-9]{3,}$" $binary_remote_addr;
 }
 limit_req_zone $aspace_deep_page zone=deeppage_limit:10m rate=20r/m;
 
-# --- Per-IP backstop for the REST of the public surface (record views, assets,
-# /cite, and random path-scanning) that the discovery rules don't cover. Enforced
-# by `limit_req zone=public_backstop` in the public catch-all location. rate=20r/s
-# with a large burst (set at the location) is generous enough that a NAT'd
-# institution browsing asset-heavy pages is not throttled, while a single-IP
-# scanner spraying thousands of requests/404s is still capped. It is per-IP, so it
-# contains single-IP scanners but (by design) only lightly touches the many-IP
-# swarm, which the concurrency + signature layers handle instead. CAVEAT: clients
-# behind one shared NAT/egress IP share this bucket -- for a site known to sit
-# behind a single very large egress, raise this further or allow-list that IP.
+# Per-IP backstop for the rest of the public surface (record views, assets, path-scanning) not covered by discovery rules.
 limit_req_zone $binary_remote_addr zone=public_backstop:10m rate=20r/s;
 
 upstream app_api {
@@ -122,16 +64,7 @@ server {
 
   ${ROOT_REDIRECT_BLOCK}
 
-  # Public catch-all: everything under the public prefix that no more-specific
-  # location below matches (home page, record views, assets, /cite fallbacks, and
-  # any random/scanned paths) is proxied to the PUI here.
-  #   ${PUI_IPS_ALLOWED}; deny all;  -> optional per-tenant IP allow-list
-  #     (default "allow 0.0.0.0/0"); the deny makes the allow authoritative.
-  #   limit_req public_backstop      -> per-IP flood backstop (zone = 20r/s). With
-  #     burst=200 nodelay a real page's asset/tree-node burst passes instantly,
-  #     then a single IP is held to 20r/s -- containing single-IP scanners that
-  #     spray random paths/404s across the non-discovery surface. Over-limit
-  #     requests get 503 (retryable).
+  # Public catch-all: everything under the public prefix not matched by a more specific location; per-IP flood backstop applied.
   location ${PUBLIC_PREFIX} {
     ${PUI_IPS_ALLOWED};
     deny all;
@@ -143,19 +76,12 @@ server {
       deny all;
   }
 
-  # Block file extensions ArchivesSpace never serves. The jsp/jhtml/jsa/cfm/shtml/
-  # exe additions catch the /start.<ext> and *.exe appliance-probe families seen
-  # scanning the fleet; none of these extensions are ever served by ArchivesSpace.
+  # Block file extensions ArchivesSpace never serves (also catches /start.<ext> appliance-probe scans).
   location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)$ {
     return 404;
   }
 
-  # Block known scanner and exploit paths. The trailing group (owa..sap/bc) was
-  # added from observed fleet traffic: appliance/CVE login probes (Exchange OWA,
-  # Fortinet /remote, Versa, ScadaBR, Apache NiFi, Pandora FMS, NetIQ /nidp, Trend
-  # Micro OfficeScan, /boaform, mailinspector, SAP /sap/bc) that previously slipped
-  # past the extension filter and reached the PUI backend as a 404. None of these
-  # roots are ArchivesSpace routes, so the block is false-positive-free.
+  # Block known scanner/exploit/appliance-CVE probe paths; none are real ArchivesSpace routes.
   location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf|heapdump|graphql|geoserver|wls-wsat|autodiscover|owa|webui|versa|remote|scadabr|nifi|pandora_console|nidp|officescan|boaform|mailinspector|sap/bc) {
     return 403;
   }
@@ -173,40 +99,16 @@ server {
     proxy_pass http://app_staff;
   }
 
-  # Public search (top-level). Hits Solr and is a heavy injection-probe target,
-  # so it runs the full discovery-config defense stack (SQLi block, rate +
-  # concurrency limits, deep-page cap, micro-cache). Anchored to the public
-  # prefix so staff routes (e.g. the linker's /search.json) are not captured and
-  # misrouted to app_public.
+  # Public search: heavy injection-probe target, so it runs the full discovery-config defense stack.
+  # Anchored to the public prefix so staff routes (e.g. /search.json) aren't captured here.
   location ~* ^${PUBLIC_PREFIX}(advanced_)?search {
     include /etc/nginx/discovery-config;
     proxy_pass http://app_public;
   }
 
-  # Faceted browse / discovery LIST pages -- the crawl + SQL-injection target,
-  # otherwise unprotected (these fall through to the catch-all by default). Runs
-  # the full discovery-config defense stack.
-  #
-  # Regex breakdown (after ${PUBLIC_PREFIX} is substituted, e.g. "/" or
-  # "/public/"):
-  #   repositories/resources               cross-repo resource browse
-  #   repositories/[0-9]+/(resources|       per-repo browse lists, e.g.
-  #     objects|accessions|classifications|   /repositories/5/objects -- the
-  #     agents|subjects|digital_objects|      shape vcu/montclair were attacked
-  #     search)                               through and the original rule missed
-  #   objects|agents|subjects|              top-level discovery lists
-  #     classifications|cite
-  #   (/?(\?|$))                            TERMINAL anchor: the collection name
-  #     must be the last path segment (optional trailing slash) followed by a
-  #     query string or end-of-URI. This is what EXCLUDES record/detail views
-  #     like /repositories/N/resources/N and tree/waypoint loads
-  #     (/repositories/N/resources/N/tree/...), so normal browsing and finding-
-  #     aid rendering are never rate-limited/cached here. Verified by test.
-  #   ~* = case-insensitive match.
+  # Faceted browse / discovery list pages (the crawl + SQLi target); anchored to exclude record/detail and tree/waypoint views.
   location ~* ^${PUBLIC_PREFIX}(repositories/resources|repositories/[0-9]+/(resources|objects|accessions|classifications|agents|subjects|digital_objects|search)|objects|agents|subjects|classifications|cite)(/?(\?|$)) {
-    # Preserve the tenant PUI IP allow-list here too: a regex location takes
-    # precedence over the prefix catch-all, so without this an IP-restricted site
-    # would have its restriction bypassed on these endpoints.
+    # Repeat the IP allow-list here: a regex location takes precedence over the prefix catch-all.
     ${PUI_IPS_ALLOWED};
     deny all;
     include /etc/nginx/discovery-config;

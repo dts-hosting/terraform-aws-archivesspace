@@ -13,18 +13,12 @@ ENV API_IPS_ALLOWED="allow 0.0.0.0/0" \
     STAFF_PREFIX="/" \
     UPSTREAM_HOST="localhost"
 
-# Per-tenant concurrency ceiling for public discovery/browse/search (consumed by
-# discovery-config via envsubst in the entrypoint). Default suits a medium
-# tenant; override per instance_spec from Terraform for large/xlarge sites.
+# Per-tenant concurrency ceiling for public discovery/browse/search; override per instance_spec for large/xlarge sites.
 ENV DISCOVERY_MAX_CONN="48"
 
 COPY templates/*-domain.conf.template /etc/nginx/conf.d/
 COPY common-config /etc/nginx/
-# Public-side anti-abuse rule snippet `include`d by the discovery/search/browse
-# locations in both domain templates. Shipped as a .template; the entrypoint
-# renders it with envsubst (only ${DISCOVERY_MAX_CONN} is substituted) to
-# /etc/nginx/discovery-config. Its many nginx $variables are passed through
-# verbatim and evaluated at request time.
+# Anti-abuse rule snippet included by the discovery/search/browse locations; rendered via envsubst at container start.
 COPY discovery-config /etc/nginx/discovery-config.template
 
 COPY docker-entrypoint.sh /
