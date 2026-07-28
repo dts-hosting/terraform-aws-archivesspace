@@ -1,0 +1,63 @@
+# Shared hardening for public discovery/browse/search: concurrency caps + a SQLi/OOB block + signature throttles + a micro-cache.
+
+# 1. Concurrency caps: bounds in-flight requests, independent of how many source IPs an attacker rotates through.
+
+# Per-IP: how many simultaneous discovery requests one source IP may hold; raised to 24 to be friendly to NAT'd institutions.
+limit_conn discovery_perip 24;
+
+# Per-tenant circuit breaker on the shared DB; ${DISCOVERY_MAX_CONN} (Dockerfile default 48) is the first knob to raise for legit peak load.
+limit_conn discovery_total ${DISCOVERY_MAX_CONN};
+
+# Explicit for clarity: 503 is already nginx's limit_conn default.
+limit_conn_status 503;
+
+# 2. SQL-injection block: drops sqlmap-style probes (function-call shapes, not bare words) so "select committee" etc. never match.
+if ($args ~* "(sleep\(|sysdate\(|benchmark\(|pg_sleep\(|waitfor(\s|%20|\+)+delay|extractvalue\(|updatexml\(|select(\s|%20|\+)*\((\s|%20)*(select|[0-9])|information_schema|into(\s|%20|\+)+outfile)") {
+  return 403;
+}
+
+# Out-of-band callback (bxss.me, oast/interactsh, Burp Collaborator) and Ruby code-injection/SSTI probes, plus the n*n= boolean-SQLi shape.
+if ($args ~* "(bxss\.me|\.oast\.|oastify|burpcollaborator|interact\.sh|Socket\.gethostbyname|require[^&]{0,3}socket|[0-9]+\*[0-9]+(\s|%20|\+)*=)") {
+  return 403;
+}
+
+# 3. Per-IP request-rate limit: burst=20 nodelay, then held to search_limit's 120r/m; a human stays under it, a scanner gets throttled hard.
+limit_req zone=search_limit burst=20 nodelay;
+
+# 4. Double-encoded wildcard throttle: the distributed crawl fingerprint (%252A); global bucket since it's a low-rate-per-IP swarm.
+limit_req zone=doubleenc_limit burst=5 nodelay;
+
+# 5. Deep-pagination throttle: page>=100 is bot-dominated, but the PUI's own "last page" link can legitimately land here too, so throttle not 404.
+limit_req zone=deeppage_limit burst=10 nodelay;
+
+# 6. Per-connection bandwidth cap: 1MB/s after the first 512KB, so normal small pages are unaffected but bulk extraction is slowed.
+limit_rate_after 512k;
+limit_rate 1m;
+
+# 7. Micro-cache: offloads repeated facet/browse queries and serves stale content during backend errors/restarts instead of a 502 storm.
+proxy_cache aspace_cache;
+
+# Only GET/HEAD are cacheable; POST (e.g. request-cart submits) always passes through.
+proxy_cache_methods GET HEAD;
+
+# Cache key includes the full query string, so each facet combination is cached and shared separately.
+proxy_cache_key "$scheme$host$request_uri";
+
+# Short, conservative TTLs since archival data changes rarely; raise if more backend offload is desired.
+proxy_cache_valid 200 301 302 60s;
+proxy_cache_valid 404 30s;
+
+# Never serve from or store into cache for authenticated sessions (see $aspace_skip_cache in the templates).
+proxy_cache_bypass $aspace_skip_cache;
+proxy_no_cache $aspace_skip_cache;
+
+# Thundering-herd control: only the first client populates an uncached entry, others wait briefly instead of stampeding the backend.
+proxy_cache_lock on;
+proxy_cache_lock_timeout 10s;
+
+# Serve a stale cached copy on backend error/timeout/5xx; background_update refreshes it asynchronously.
+proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+proxy_cache_background_update on;
+
+# Expose cache result (HIT/MISS/STALE/BYPASS) for validation/tuning.
+add_header X-Cache-Status $upstream_cache_status always;

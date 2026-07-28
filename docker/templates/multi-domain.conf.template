@@ -1,7 +1,41 @@
 limit_req_zone $binary_remote_addr zone=waypoints_limit:16m rate=23r/s;
 limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
 limit_req_zone $binary_remote_addr zone=pdf_limit:10m rate=2r/m;
-limit_req_zone $binary_remote_addr zone=search_limit:10m rate=30r/m;
+# Raised 30r/m -> 120r/m so a NAT'd institution isn't throttled as if it were a single user.
+limit_req_zone $binary_remote_addr zone=search_limit:10m rate=120r/m;
+
+# Public-side anti-abuse zones/maps (http context only); enforced in the public location blocks via discovery-config.
+
+# Per-IP cap on simultaneous in-flight discovery requests.
+limit_conn_zone $binary_remote_addr zone=discovery_perip:10m;
+# Per-hostname circuit breaker on total concurrent discovery load against the shared DB.
+limit_conn_zone $server_name        zone=discovery_total:10m;
+
+# Micro-cache storage for discovery responses; TTLs/bypass/stale behavior set in discovery-config.
+proxy_cache_path /var/cache/nginx/aspace levels=1:2 keys_zone=aspace_cache:16m max_size=512m inactive=10m use_temp_path=off;
+
+# Cache-bypass classifier: skip the shared cache for any request carrying a *_session cookie.
+map $http_cookie $aspace_skip_cache {
+  default      0;
+  "~*_session" 1;
+}
+
+# Distributed-crawl fingerprint: the swarm double-encodes the match-all wildcard (q[]=%252A); real PUI traffic never does.
+map $args $aspace_doubleenc {
+  default      "";
+  "~*%252[Aa]" "doubleenc";
+}
+limit_req_zone $aspace_doubleenc zone=doubleenc_limit:10m rate=30r/m;
+
+# Deep-offset pagination (page>=100) throttle, keyed per IP so a human's "last page" click still passes.
+map $arg_page $aspace_deep_page {
+  default        "";
+  "~^[0-9]{3,}$" $binary_remote_addr;
+}
+limit_req_zone $aspace_deep_page zone=deeppage_limit:10m rate=20r/m;
+
+# Per-IP backstop for the rest of the public surface (record views, assets, path-scanning) not covered by discovery rules.
+limit_req_zone $binary_remote_addr zone=public_backstop:10m rate=20r/s;
 
 upstream app_api {
   server ${UPSTREAM_HOST}:8089;
@@ -30,23 +64,25 @@ server {
 
   ${ROOT_REDIRECT_BLOCK}
 
+  # Public catch-all: everything not matched by a more specific location; per-IP flood backstop applied.
   location ${PUBLIC_PREFIX} {
     ${PUI_IPS_ALLOWED};
     deny all;
+    limit_req zone=public_backstop burst=200 nodelay;
     proxy_pass http://app_public;
   }
 
-  location ~* (wp-admin|wp-includes|wp-content|xmlrpc\.php|wp-login\.php|wp-config\.php|wp-cron\.php|wp-trackback\.php|wp-comments-post\.php|wp-links-opml\.php) {
+  location ~* (wp-admin|wp-includes|wp-content|wp-json|xmlrpc\.php|wp-login\.php|wp-config\.php|wp-cron\.php|wp-trackback\.php|wp-comments-post\.php|wp-links-opml\.php) {
       deny all;
   }
 
-  # Block file extensions ArchivesSpace never serves
-  location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat)$ {
+  # Block file extensions ArchivesSpace never serves (also catches /start.<ext> appliance-probe scans).
+  location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)$ {
     return 404;
   }
 
-  # Block known scanner and exploit paths
-  location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf|heapdump|graphql|geoserver|wls-wsat|autodiscover) {
+  # Block known scanner/exploit/appliance-CVE probe paths; none are real ArchivesSpace routes.
+  location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf|heapdump|graphql|geoserver|wls-wsat|autodiscover|owa|webui|versa|remote|scadabr|nifi|pandora_console|nidp|officescan|boaform|mailinspector|sap/bc) {
     return 403;
   }
 
@@ -55,9 +91,18 @@ server {
     return 403;
   }
 
-  # Rate-limit search (hits Solr; targeted heavily by injection probes)
+  # Public search: heavy injection-probe target, so it runs the full discovery-config defense stack.
   location ~* ^/(advanced_)?search {
-    limit_req zone=search_limit burst=20 nodelay;
+    include /etc/nginx/discovery-config;
+    proxy_pass http://app_public;
+  }
+
+  # Faceted browse / discovery list pages (the crawl + SQLi target); anchored to exclude record/detail and tree/waypoint views.
+  location ~* ^/(repositories/resources|repositories/[0-9]+/(resources|objects|accessions|classifications|agents|subjects|digital_objects|search)|objects|agents|subjects|classifications|cite)(/?(\?|$)) {
+    # Repeat the IP allow-list here: a regex location takes precedence over the prefix catch-all.
+    ${PUI_IPS_ALLOWED};
+    deny all;
+    include /etc/nginx/discovery-config;
     proxy_pass http://app_public;
   }
 
@@ -84,13 +129,13 @@ server {
   set_real_ip_from ${REAL_IP_CIDR};
   include /etc/nginx/common-config;
 
-  # Block file extensions ArchivesSpace never serves
-  location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat)$ {
+  # Block file extensions ArchivesSpace never serves (also catches /start.<ext> appliance-probe scans).
+  location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)$ {
     return 404;
   }
 
-  # Block known scanner and exploit paths
-  location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf|heapdump|graphql|geoserver|wls-wsat|autodiscover) {
+  # Block known scanner/exploit/appliance-CVE probe paths; none are real ArchivesSpace routes.
+  location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf|heapdump|graphql|geoserver|wls-wsat|autodiscover|owa|webui|versa|remote|scadabr|nifi|pandora_console|nidp|officescan|boaform|mailinspector|sap/bc) {
     return 403;
   }
 
