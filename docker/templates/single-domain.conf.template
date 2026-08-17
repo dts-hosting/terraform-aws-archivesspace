@@ -20,6 +20,13 @@ map $http_cookie $aspace_skip_cache {
   "~*_session" 1;
 }
 
+# Redact query strings containing a password (e.g. /staff/api/users/*/login?password=...)
+# from the access log, so credentials never hit /dev/stdout.
+map $args $safe_args {
+  default        $args;
+  "~*password="  "password=REDACTED";
+}
+
 # Distributed-crawl fingerprint: the swarm double-encodes the match-all wildcard (q[]=%252A); real PUI traffic never does.
 map $args $aspace_doubleenc {
   default      "";
@@ -33,6 +40,20 @@ map $arg_page $aspace_deep_page {
   "~^[0-9]{3,}$" $binary_remote_addr;
 }
 limit_req_zone $aspace_deep_page zone=deeppage_limit:10m rate=20r/m;
+
+# Same classifier as $aspace_deep_page, but a loggable flag instead of the raw binary
+# rate-limit key (which would corrupt the access log if written to it directly).
+map $arg_page $aspace_deep_page_logged {
+  default        "";
+  "~^[0-9]{3,}$" "1";
+}
+
+log_format sanitized '$remote_addr - $remote_user [$time_local] "$host" '
+                      '"$request_method $uri$is_args$safe_args $server_protocol" '
+                      '$status $body_bytes_sent "$http_referer" "$http_user_agent" '
+                      'rt=$request_time uct="$upstream_response_time" cache=$upstream_cache_status '
+                      'req_limit=$limit_req_status conn_limit=$limit_conn_status '
+                      'skip_cache=$aspace_skip_cache doubleenc=$aspace_doubleenc deep_page=$aspace_deep_page_logged';
 
 # Per-IP backstop for the rest of the public surface (record views, assets, path-scanning) not covered by discovery rules.
 limit_req_zone $binary_remote_addr zone=public_backstop:10m rate=20r/s;

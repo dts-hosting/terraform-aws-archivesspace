@@ -5,7 +5,7 @@ charset utf-8;
 client_body_buffer_size 64m;
 client_max_body_size    64M;
 
-access_log /dev/stdout;
+access_log /dev/stdout sanitized;
 error_log  /dev/stdout info;
 
 gzip              on;
@@ -62,6 +62,10 @@ location /health {
   default_type text/html;
   return 200 "<!DOCTYPE html><h1>Not too bad!</h1>\n";
   access_log off;
+}
+
+location = /.well-known/security.txt {
+  proxy_pass http://app_public;
 }
 
 location ^~ /.well-known/ {
