@@ -64,10 +64,6 @@ location /health {
   access_log off;
 }
 
-location = /.well-known/security.txt {
-  proxy_pass http://app_public;
-}
-
 location ^~ /.well-known/ {
   return 404;
   access_log off;
