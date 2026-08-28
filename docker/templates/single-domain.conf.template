@@ -104,12 +104,12 @@ server {
 
   # Block known scanner/exploit/appliance-CVE probe paths; none are real ArchivesSpace routes.
   location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf|heapdump|graphql|geoserver|wls-wsat|autodiscover|owa|webui|versa|remote|scadabr|nifi|pandora_console|nidp|officescan|boaform|mailinspector|sap/bc) {
-    return 403;
+    return 404;
   }
 
   # Block JSF and Java path traversal attempts
   location ~* (javax\.faces\.resource|WEB-INF|META-INF) {
-    return 403;
+    return 404;
   }
 
   # Rate-limit staff login to slow brute force attempts
@@ -117,6 +117,8 @@ server {
     limit_req zone=login_limit burst=10 nodelay;
     ${SUI_IPS_ALLOWED};
     deny all;
+    add_header Cache-Control "no-store" always;
+    add_header Pragma "no-cache" always;
     proxy_pass http://app_staff;
   }
 
@@ -156,6 +158,8 @@ server {
   location ${STAFF_PREFIX} {
     ${SUI_IPS_ALLOWED};
     deny all;
+    add_header Cache-Control "no-store" always;
+    add_header Pragma "no-cache" always;
     proxy_pass http://app_staff;
   }
 

@@ -54,7 +54,13 @@ tcp_nodelay on;
 proxy_cookie_flags ~ ".*" samesite=lax secure;
 
 location ^~ /_ {
-  return 403;
+  return 404;
+  access_log off;
+}
+
+# Jetty serves a directory listing when an assets path has no filename; block it at the edge.
+location ~ /assets/$ {
+  return 404;
   access_log off;
 }
 
