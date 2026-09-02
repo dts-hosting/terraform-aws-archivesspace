@@ -48,12 +48,33 @@ map $arg_page $aspace_deep_page_logged {
   "~^[0-9]{3,}$" "1";
 }
 
+map "$http_referer|$http_x_forwarded_proto://$host$request_uri" $aspace_self_referer {
+  default          "";
+  "~^(.+)\|\1$"    "1";
+}
+limit_req_zone $aspace_self_referer zone=selfreferer_limit:10m rate=30r/m;
+
+map $args $aspace_has_filter_fields {
+  default        0;
+  "~*filter_fields" 1;
+}
+map $http_cookie $aspace_has_session {
+  default                          0;
+  "~*_archivesspace-public_session" 1;
+}
+map "$aspace_has_filter_fields:$aspace_has_session" $aspace_facet_scrape {
+  default   "";
+  "1:0"     "scrape";
+}
+limit_req_zone $aspace_facet_scrape zone=facetscrape_limit:10m rate=30r/m;
+
 log_format sanitized '$remote_addr - $remote_user [$time_local] "$host" '
                       '"$request_method $uri$is_args$safe_args $server_protocol" '
                       '$status $body_bytes_sent "$http_referer" "$http_user_agent" '
                       'rt=$request_time uct="$upstream_response_time" cache=$upstream_cache_status '
                       'req_limit=$limit_req_status conn_limit=$limit_conn_status '
-                      'skip_cache=$aspace_skip_cache doubleenc=$aspace_doubleenc deep_page=$aspace_deep_page_logged';
+                      'skip_cache=$aspace_skip_cache doubleenc=$aspace_doubleenc deep_page=$aspace_deep_page_logged '
+                      'self_referer=$aspace_self_referer facet_scrape=$aspace_facet_scrape';
 
 # Per-IP backstop for the rest of the public surface (record views, assets, path-scanning) not covered by discovery rules.
 limit_req_zone $binary_remote_addr zone=public_backstop:10m rate=20r/s;
@@ -135,6 +156,13 @@ server {
 
   location ~ ^/repositories/\d+/resources/\d+/infinite/waypoints {
     limit_req zone=waypoints_limit burst=100 delay=100;
+    proxy_pass http://app_public;
+  }
+
+  location ~ ^/(repositories/[0-9]+/(resources|objects|accessions|classifications|digital_objects|archival_objects)/[0-9]+|agents/(people|corporate_entities|families|software)/[0-9]+|subjects/[0-9]+|classifications/[0-9]+) {
+    ${PUI_IPS_ALLOWED};
+    deny all;
+    include /etc/nginx/discovery-config;
     proxy_pass http://app_public;
   }
 

@@ -30,6 +30,12 @@ limit_req zone=doubleenc_limit burst=5 nodelay;
 # 5. Deep-pagination throttle: page>=100 is bot-dominated, but the PUI's own "last page" link can legitimately land here too, so throttle not 404.
 limit_req zone=deeppage_limit burst=10 nodelay;
 
+# 5a. Self-referencing Referer throttle: a real browser can never be "referred" by the exact page it's requesting.
+limit_req zone=selfreferer_limit burst=5 nodelay;
+
+# 5b. Facet-filter-without-session throttle: real browsing picks up the app session cookie before ever reaching a filtered facet URL.
+limit_req zone=facetscrape_limit burst=10 nodelay;
+
 # 6. Per-connection bandwidth cap: 1MB/s after the first 512KB, so normal small pages are unaffected but bulk extraction is slowed.
 limit_rate_after 512k;
 limit_rate 1m;
