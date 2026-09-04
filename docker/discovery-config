@@ -50,7 +50,7 @@ proxy_cache_methods GET HEAD;
 proxy_cache_key "$scheme$host$request_uri";
 
 # Short, conservative TTLs since archival data changes rarely; raise if more backend offload is desired.
-proxy_cache_valid 200 301 302 60s;
+proxy_cache_valid 200 301 302 120s;
 proxy_cache_valid 404 30s;
 
 # Never serve from or store into cache for authenticated sessions (see $aspace_skip_cache in the templates).

@@ -9,8 +9,8 @@ limit_conn_zone $server_name        zone=discovery_total:10m;
 proxy_cache_path /var/cache/nginx/aspace levels=1:2 keys_zone=aspace_cache:16m max_size=512m inactive=10m use_temp_path=off;
 
 map $http_cookie $aspace_skip_cache {
-  default      0;
-  "~*_session" 1;
+  default                     0;
+  "~*archivesspace_session="  1;
 }
 
 map $args $safe_args {
@@ -96,6 +96,28 @@ server {
 
   ${ROOT_REDIRECT_BLOCK}
 
+  location = / {
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 120s;
+    proxy_pass http://app_public;
+  }
+
+  location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
+    add_header Cache-Control "public, max-age=604800, immutable" always;
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 1d;
+    proxy_pass http://app_public;
+  }
+
+  location = /robots.txt {
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 1h;
+    proxy_pass http://app_public;
+  }
+
   location ${PUBLIC_PREFIX} {
     ${PUI_IPS_ALLOWED};
     deny all;
@@ -138,6 +160,9 @@ server {
 
   location ~ ^/repositories/\d+/resources/\d+/infinite/waypoints {
     limit_req zone=waypoints_limit burst=100 delay=100;
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 120s;
     proxy_pass http://app_public;
   }
 
@@ -159,6 +184,14 @@ server {
   server_name ${STAFF_NAME};
   set_real_ip_from ${REAL_IP_CIDR};
   include /etc/nginx/common-config;
+
+  location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
+    add_header Cache-Control "public, max-age=604800, immutable" always;
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 1d;
+    proxy_pass http://app_staff;
+  }
 
   location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)(\.(bak|old|save|orig|swp|tmp)|~)?$ {
     return 404;
