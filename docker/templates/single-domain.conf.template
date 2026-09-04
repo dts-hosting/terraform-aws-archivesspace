@@ -1,48 +1,35 @@
 limit_req_zone $binary_remote_addr zone=waypoints_limit:16m rate=23r/s;
 limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
 limit_req_zone $binary_remote_addr zone=pdf_limit:10m rate=2r/m;
-# Raised 30r/m -> 120r/m so a NAT'd institution isn't throttled as if it were a single user.
 limit_req_zone $binary_remote_addr zone=search_limit:10m rate=120r/m;
 
-# Public-side anti-abuse zones/maps (http context only); enforced in the public location blocks via discovery-config.
-
-# Per-IP cap on simultaneous in-flight discovery requests.
 limit_conn_zone $binary_remote_addr zone=discovery_perip:10m;
-# One bucket for the whole tenant (server_name is "_" here), a per-site circuit breaker on the shared DB.
 limit_conn_zone $server_name        zone=discovery_total:10m;
 
-# Micro-cache storage for discovery responses; TTLs/bypass/stale behavior set in discovery-config.
 proxy_cache_path /var/cache/nginx/aspace levels=1:2 keys_zone=aspace_cache:16m max_size=512m inactive=10m use_temp_path=off;
 
-# Cache-bypass classifier: skip the shared cache for any request carrying a *_session cookie.
 map $http_cookie $aspace_skip_cache {
   default      0;
   "~*_session" 1;
 }
 
-# Redact query strings containing a password (e.g. /staff/api/users/*/login?password=...)
-# from the access log, so credentials never hit /dev/stdout.
 map $args $safe_args {
   default        $args;
   "~*password="  "password=REDACTED";
 }
 
-# Distributed-crawl fingerprint: the swarm double-encodes the match-all wildcard (q[]=%252A); real PUI traffic never does.
 map $args $aspace_doubleenc {
   default      "";
   "~*%252[Aa]" "doubleenc";
 }
 limit_req_zone $aspace_doubleenc zone=doubleenc_limit:10m rate=30r/m;
 
-# Deep-offset pagination (page>=100) throttle, keyed per IP so a human's "last page" click still passes.
 map $arg_page $aspace_deep_page {
   default        "";
   "~^[0-9]{3,}$" $binary_remote_addr;
 }
 limit_req_zone $aspace_deep_page zone=deeppage_limit:10m rate=20r/m;
 
-# Same classifier as $aspace_deep_page, but a loggable flag instead of the raw binary
-# rate-limit key (which would corrupt the access log if written to it directly).
 map $arg_page $aspace_deep_page_logged {
   default        "";
   "~^[0-9]{3,}$" "1";
@@ -76,23 +63,26 @@ log_format sanitized '$remote_addr - $remote_user [$time_local] "$host" '
                       'skip_cache=$aspace_skip_cache doubleenc=$aspace_doubleenc deep_page=$aspace_deep_page_logged '
                       'self_referer=$aspace_self_referer facet_scrape=$aspace_facet_scrape';
 
-# Per-IP backstop for the rest of the public surface (record views, assets, path-scanning) not covered by discovery rules.
 limit_req_zone $binary_remote_addr zone=public_backstop:10m rate=20r/s;
 
 upstream app_api {
   server ${UPSTREAM_HOST}:8089;
+  keepalive 8;
 }
 
 upstream app_oai {
   server ${UPSTREAM_HOST}:8082;
+  keepalive 8;
 }
 
 upstream app_public {
   server ${UPSTREAM_HOST}:8081;
+  keepalive 8;
 }
 
 upstream app_staff {
   server ${UPSTREAM_HOST}:8080;
+  keepalive 8;
 }
 
 server_names_hash_bucket_size 128;
@@ -106,7 +96,6 @@ server {
 
   ${ROOT_REDIRECT_BLOCK}
 
-  # Public catch-all: everything under the public prefix not matched by a more specific location; per-IP flood backstop applied.
   location ${PUBLIC_PREFIX} {
     ${PUI_IPS_ALLOWED};
     deny all;
@@ -118,22 +107,18 @@ server {
       deny all;
   }
 
-  # Block file extensions ArchivesSpace never serves (also catches /start.<ext> appliance-probe scans).
-  location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)$ {
+  location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)(\.(bak|old|save|orig|swp|tmp)|~)?$ {
     return 404;
   }
 
-  # Block known scanner/exploit/appliance-CVE probe paths; none are real ArchivesSpace routes.
   location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf|heapdump|graphql|geoserver|wls-wsat|autodiscover|owa|webui|versa|remote|scadabr|nifi|pandora_console|nidp|officescan|boaform|mailinspector|sap/bc) {
     return 404;
   }
 
-  # Block JSF and Java path traversal attempts
   location ~* (javax\.faces\.resource|WEB-INF|META-INF) {
     return 404;
   }
 
-  # Rate-limit staff login to slow brute force attempts
   location = /staff/login {
     limit_req zone=login_limit burst=10 nodelay;
     ${SUI_IPS_ALLOWED};
@@ -143,23 +128,18 @@ server {
     proxy_pass http://app_staff;
   }
 
-  # Public search: heavy injection-probe target, so it runs the full discovery-config defense stack.
-  # Anchored to the public prefix so staff routes (e.g. /search.json) aren't captured here.
   location ~* ^${PUBLIC_PREFIX}(advanced_)?search {
     include /etc/nginx/discovery-config;
     proxy_pass http://app_public;
   }
 
-  # Faceted browse / discovery list pages (the crawl + SQLi target); anchored to exclude record/detail and tree/waypoint views.
   location ~* ^${PUBLIC_PREFIX}(repositories/resources|repositories/[0-9]+/(resources|objects|accessions|classifications|agents|subjects|digital_objects|search)|objects|agents|subjects|classifications|cite)(/?(\?|$)) {
-    # Repeat the IP allow-list here: a regex location takes precedence over the prefix catch-all.
     ${PUI_IPS_ALLOWED};
     deny all;
     include /etc/nginx/discovery-config;
     proxy_pass http://app_public;
   }
 
-  # Rate-limit public PDF generation (CPU-intensive endpoint)
   location ~ ^${PUBLIC_PREFIX}repositories/[0-9]+/resources/[0-9]+/pdf$ {
     limit_req zone=pdf_limit burst=4 nodelay;
     proxy_pass http://app_public;
