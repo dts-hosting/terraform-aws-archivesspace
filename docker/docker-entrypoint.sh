@@ -13,7 +13,17 @@ fi
 export REDIRECT_BLOCK
 export ROOT_REDIRECT_BLOCK
 
-envsubst '${API_IPS_ALLOWED} ${API_PREFIX} ${OAI_PREFIX} ${PUBLIC_NAME} ${PUBLIC_PREFIX} ${PUI_IPS_ALLOWED} ${REAL_IP_CIDR} ${STAFF_NAME} ${STAFF_PREFIX} ${SUI_IPS_ALLOWED} ${UPSTREAM_HOST} ${REDIRECT_BLOCK} ${ROOT_REDIRECT_BLOCK}' \
+# In single-domain mode there's one server block shared by both UIs, split only by path
+# prefix; the root path and unprefixed asset requests need to go to whichever UI is
+# actually running, since app_public never starts when PUBLIC_ENABLED is false.
+if [ "$PUBLIC_ENABLED" = "true" ]; then
+  ROOT_UPSTREAM="app_public"
+else
+  ROOT_UPSTREAM="app_staff"
+fi
+export ROOT_UPSTREAM
+
+envsubst '${API_IPS_ALLOWED} ${API_PREFIX} ${OAI_PREFIX} ${PUBLIC_NAME} ${PUBLIC_PREFIX} ${PUI_IPS_ALLOWED} ${REAL_IP_CIDR} ${ROOT_UPSTREAM} ${STAFF_NAME} ${STAFF_PREFIX} ${SUI_IPS_ALLOWED} ${UPSTREAM_HOST} ${REDIRECT_BLOCK} ${ROOT_REDIRECT_BLOCK}' \
   < /etc/nginx/conf.d/$PROXY_TYPE-domain.conf.template > /etc/nginx/conf.d/default.conf
 
 # Render the anti-abuse include; only DISCOVERY_MAX_CONN is substituted, nginx runtime vars pass through untouched.

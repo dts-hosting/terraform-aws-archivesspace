@@ -103,14 +103,6 @@ server {
     proxy_pass http://app_public;
   }
 
-  location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
-    add_header Cache-Control "public, max-age=604800, immutable" always;
-    add_header X-Cache-Status $upstream_cache_status always;
-    proxy_cache aspace_cache;
-    proxy_cache_valid 200 1d;
-    proxy_pass http://app_public;
-  }
-
   location = /robots.txt {
     add_header X-Cache-Status $upstream_cache_status always;
     proxy_cache aspace_cache;
@@ -139,6 +131,14 @@ server {
 
   location ~* (javax\.faces\.resource|WEB-INF|META-INF) {
     return 404;
+  }
+
+  location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
+    add_header Cache-Control "public, max-age=604800, immutable";
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 1d;
+    proxy_pass http://app_public;
   }
 
   location ~* ^/(advanced_)?search {
@@ -185,14 +185,6 @@ server {
   set_real_ip_from ${REAL_IP_CIDR};
   include /etc/nginx/common-config;
 
-  location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
-    add_header Cache-Control "public, max-age=604800, immutable" always;
-    add_header X-Cache-Status $upstream_cache_status always;
-    proxy_cache aspace_cache;
-    proxy_cache_valid 200 1d;
-    proxy_pass http://app_staff;
-  }
-
   location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)(\.(bak|old|save|orig|swp|tmp)|~)?$ {
     return 404;
   }
@@ -203,6 +195,14 @@ server {
 
   location ~* (javax\.faces\.resource|WEB-INF|META-INF) {
     return 404;
+  }
+
+  location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
+    add_header Cache-Control "public, max-age=604800, immutable";
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 1d;
+    proxy_pass http://app_staff;
   }
 
   location = /staff/login {

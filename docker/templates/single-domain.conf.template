@@ -100,15 +100,7 @@ server {
     add_header X-Cache-Status $upstream_cache_status always;
     proxy_cache aspace_cache;
     proxy_cache_valid 200 120s;
-    proxy_pass http://app_public;
-  }
-
-  location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
-    add_header Cache-Control "public, max-age=604800, immutable" always;
-    add_header X-Cache-Status $upstream_cache_status always;
-    proxy_cache aspace_cache;
-    proxy_cache_valid 200 1d;
-    proxy_pass http://app_public;
+    proxy_pass http://${ROOT_UPSTREAM};
   }
 
   location ${PUBLIC_PREFIX} {
@@ -132,6 +124,22 @@ server {
 
   location ~* (javax\.faces\.resource|WEB-INF|META-INF) {
     return 404;
+  }
+
+  location ~* ^${STAFF_PREFIX}.*assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
+    add_header Cache-Control "public, max-age=604800, immutable";
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 1d;
+    proxy_pass http://app_staff;
+  }
+
+  location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
+    add_header Cache-Control "public, max-age=604800, immutable";
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 1d;
+    proxy_pass http://${ROOT_UPSTREAM};
   }
 
   location = /staff/login {
