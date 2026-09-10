@@ -39,7 +39,7 @@ map "$http_referer|$http_x_forwarded_proto://$host$request_uri" $aspace_self_ref
   default          "";
   "~^(.+)\|\1$"    "1";
 }
-limit_req_zone $aspace_self_referer zone=selfreferer_limit:10m rate=30r/m;
+limit_req_zone $aspace_self_referer zone=selfreferer_limit:10m rate=15r/m;
 
 map $args $aspace_has_filter_fields {
   default        0;
@@ -53,7 +53,43 @@ map "$aspace_has_filter_fields:$aspace_has_session" $aspace_facet_scrape {
   default   "";
   "1:0"     "scrape";
 }
-limit_req_zone $aspace_facet_scrape zone=facetscrape_limit:10m rate=30r/m;
+map "$aspace_has_filter_fields:$aspace_has_session" $aspace_facet_scrape_key {
+  default   "";
+  "1:0"     $binary_remote_addr;
+}
+limit_req_zone $aspace_facet_scrape_key zone=facetscrape_limit:10m rate=30r/m;
+
+# Full-form-submission fingerprint: real narrow searches almost never populate every
+# optional search-form field (including the blank ones) on every request; a scripted
+# crawl re-submitting the whole form does. Order-independent (real samples vary).
+map $args $aspace_form_scrape {
+  default "";
+  "~*^(?=.*field\[\])(?=.*filter_fields\[\])(?=.*from_year\[\])(?=.*op\[\])(?=.*sort=)(?=.*to_year\[\])" "formscrape";
+}
+limit_req_zone $aspace_form_scrape zone=formscrape_limit:10m rate=15r/m;
+
+# Facet-filter params on a single-record detail page: filter_fields/filter_values only
+# mean anything on a list/search view, never on one record's own page.
+map $uri $aspace_is_detail_page {
+  default 0;
+  "~*^/repositories/\d+/(archival_objects|resources|digital_objects|classification_terms|top_containers)/\d+$" 1;
+  "~*^/agents/(people|corporate_entities|families|software)/\d+$" 1;
+  "~*^/subjects/\d+$" 1;
+  "~*^/classifications/\d+$" 1;
+}
+map "$aspace_is_detail_page:$aspace_has_filter_fields" $aspace_detail_scrape {
+  default "";
+  "1:1"   "detailscrape";
+}
+limit_req_zone $aspace_detail_scrape zone=detailscrape_limit:10m rate=15r/m;
+
+# Filter-chain depth: real users chain at most ~3 facet filters in one request; bots
+# enumerating combinations chain far more. Path-agnostic (list or detail pages alike).
+map $args $aspace_filter_chain {
+  default "";
+  "~*^(?:.*?filter_fields(?:\[\]|%5[bB]%5[dD])=){4,}" "filterchain";
+}
+limit_req_zone $aspace_filter_chain zone=filterchain_limit:10m rate=15r/m;
 
 log_format sanitized '$remote_addr - $remote_user [$time_local] "$host" '
                       '"$request_method $uri$is_args$safe_args $server_protocol" '
@@ -61,7 +97,9 @@ log_format sanitized '$remote_addr - $remote_user [$time_local] "$host" '
                       'rt=$request_time uct="$upstream_response_time" cache=$upstream_cache_status '
                       'req_limit=$limit_req_status conn_limit=$limit_conn_status '
                       'skip_cache=$aspace_skip_cache doubleenc=$aspace_doubleenc deep_page=$aspace_deep_page_logged '
-                      'self_referer=$aspace_self_referer facet_scrape=$aspace_facet_scrape';
+                      'self_referer=$aspace_self_referer facet_scrape=$aspace_facet_scrape '
+                      'form_scrape=$aspace_form_scrape detail_scrape=$aspace_detail_scrape '
+                      'filter_chain=$aspace_filter_chain';
 
 limit_req_zone $binary_remote_addr zone=public_backstop:10m rate=20r/s;
 
