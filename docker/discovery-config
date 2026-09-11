@@ -36,8 +36,7 @@ limit_req zone=selfreferer_limit burst=2 nodelay;
 # 5b. Facet-filter-without-session throttle: real browsing picks up the app session cookie before ever reaching a filtered facet URL.
 limit_req zone=facetscrape_limit burst=10 nodelay;
 
-# 5b-2. Global companion to 5b: catches an IP-rotating swarm's aggregate volume even when
-# no single IP crosses the per-IP facetscrape_limit rate above.
+# 5b-2. Global companion to 5b: catches an IP-rotating swarm whose aggregate volume no single IP's rate crosses.
 limit_req zone=facetscrape_global_limit burst=10 nodelay;
 
 # 5c. Full-form-submission fingerprint: global bucket, same shape as doubleenc_limit.

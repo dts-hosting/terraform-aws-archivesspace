@@ -59,22 +59,17 @@ map "$aspace_has_filter_fields:$aspace_has_session" $aspace_facet_scrape_key {
 }
 limit_req_zone $aspace_facet_scrape_key zone=facetscrape_limit:10m rate=30r/m;
 
-# Global companion to facetscrape_limit: the per-IP zone above lets an IP-rotating swarm
-# through since no single IP crosses the per-IP rate; this shared bucket still catches
-# the swarm's aggregate volume even though each IP looks fine alone.
+# Global companion to facetscrape_limit: catches an IP-rotating swarm's aggregate volume that no single IP's rate crosses.
 limit_req_zone $aspace_facet_scrape zone=facetscrape_global_limit:10m rate=15r/m;
 
-# Full-form-submission fingerprint: real narrow searches almost never populate every
-# optional search-form field (including the blank ones) on every request; a scripted
-# crawl re-submitting the whole form does. Order-independent (real samples vary).
+# Full-form-submission fingerprint: real searches rarely populate every optional field (blanks included); a scripted crawl resubmitting the whole form does, in any order.
 map $args $aspace_form_scrape {
   default "";
   "~*^(?=.*field\[\])(?=.*filter_fields\[\])(?=.*from_year\[\])(?=.*op\[\])(?=.*sort=)(?=.*to_year\[\])" "formscrape";
 }
 limit_req_zone $aspace_form_scrape zone=formscrape_limit:10m rate=15r/m;
 
-# Facet-filter params on a single-record detail page: filter_fields/filter_values only
-# mean anything on a list/search view, never on one record's own page.
+# Facet-filter params on a single-record detail page: filter_fields/filter_values only mean anything on a list/search view, never on one record's own page.
 map $uri $aspace_is_detail_page {
   default 0;
   "~*^/repositories/\d+/(archival_objects|resources|digital_objects|classification_terms|top_containers)/\d+$" 1;
@@ -88,8 +83,7 @@ map "$aspace_is_detail_page:$aspace_has_filter_fields" $aspace_detail_scrape {
 }
 limit_req_zone $aspace_detail_scrape zone=detailscrape_limit:10m rate=8r/m;
 
-# Filter-chain depth: real users chain at most ~3 facet filters in one request; bots
-# enumerating combinations chain far more. Path-agnostic (list or detail pages alike).
+# Filter-chain depth: real users chain at most ~3 facet filters per request; bots enumerating combinations chain far more (list or detail pages alike).
 map $args $aspace_filter_chain {
   default "";
   "~*^(?:.*?filter_fields(?:\[\]|%5[bB]%5[dD])=){4,}" "filterchain";

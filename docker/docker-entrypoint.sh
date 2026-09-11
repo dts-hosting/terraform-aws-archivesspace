@@ -13,9 +13,7 @@ fi
 export REDIRECT_BLOCK
 export ROOT_REDIRECT_BLOCK
 
-# In single-domain mode there's one server block shared by both UIs, split only by path
-# prefix; the root path and unprefixed asset requests need to go to whichever UI is
-# actually running, since app_public never starts when PUBLIC_ENABLED is false.
+# Single-domain mode shares one server block between UIs; root/unprefixed assets must route to whichever UI is actually running, since app_public never starts when PUBLIC_ENABLED is false.
 if [ "$PUBLIC_ENABLED" = "true" ]; then
   ROOT_UPSTREAM="app_public"
 else
