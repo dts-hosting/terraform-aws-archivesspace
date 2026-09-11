@@ -39,7 +39,7 @@ map "$http_referer|$http_x_forwarded_proto://$host$request_uri" $aspace_self_ref
   default          "";
   "~^(.+)\|\1$"    "1";
 }
-limit_req_zone $aspace_self_referer zone=selfreferer_limit:10m rate=15r/m;
+limit_req_zone $aspace_self_referer zone=selfreferer_limit:10m rate=10r/m;
 
 map $args $aspace_has_filter_fields {
   default        0;
@@ -58,6 +58,11 @@ map "$aspace_has_filter_fields:$aspace_has_session" $aspace_facet_scrape_key {
   "1:0"     $binary_remote_addr;
 }
 limit_req_zone $aspace_facet_scrape_key zone=facetscrape_limit:10m rate=30r/m;
+
+# Global companion to facetscrape_limit: the per-IP zone above lets an IP-rotating swarm
+# through since no single IP crosses the per-IP rate; this shared bucket still catches
+# the swarm's aggregate volume even though each IP looks fine alone.
+limit_req_zone $aspace_facet_scrape zone=facetscrape_global_limit:10m rate=15r/m;
 
 # Full-form-submission fingerprint: real narrow searches almost never populate every
 # optional search-form field (including the blank ones) on every request; a scripted
@@ -81,7 +86,7 @@ map "$aspace_is_detail_page:$aspace_has_filter_fields" $aspace_detail_scrape {
   default "";
   "1:1"   "detailscrape";
 }
-limit_req_zone $aspace_detail_scrape zone=detailscrape_limit:10m rate=15r/m;
+limit_req_zone $aspace_detail_scrape zone=detailscrape_limit:10m rate=8r/m;
 
 # Filter-chain depth: real users chain at most ~3 facet filters in one request; bots
 # enumerating combinations chain far more. Path-agnostic (list or detail pages alike).
@@ -89,7 +94,7 @@ map $args $aspace_filter_chain {
   default "";
   "~*^(?:.*?filter_fields(?:\[\]|%5[bB]%5[dD])=){4,}" "filterchain";
 }
-limit_req_zone $aspace_filter_chain zone=filterchain_limit:10m rate=15r/m;
+limit_req_zone $aspace_filter_chain zone=filterchain_limit:10m rate=8r/m;
 
 log_format sanitized '$remote_addr - $remote_user [$time_local] "$host" '
                       '"$request_method $uri$is_args$safe_args $server_protocol" '
