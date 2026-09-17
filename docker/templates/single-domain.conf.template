@@ -39,7 +39,6 @@ map "$http_referer|$http_x_forwarded_proto://$host$request_uri" $aspace_self_ref
   default          "";
   "~^(.+)\|\1$"    "1";
 }
-limit_req_zone $aspace_self_referer zone=selfreferer_limit:10m rate=10r/m;
 
 map $args $aspace_has_filter_fields {
   default        0;
@@ -49,6 +48,13 @@ map $http_cookie $aspace_has_session {
   default                          0;
   "~*_archivesspace-public_session" 1;
 }
+
+# A self-referrer hit carrying the PUI session cookie is a real client retrying, not a bot -- a cold bot request has no prior response to have gotten the cookie from.
+map "$aspace_self_referer:$aspace_has_session" $aspace_self_referer_unsafe {
+  default "";
+  "1:0"   "1";
+}
+limit_req_zone $aspace_self_referer_unsafe zone=selfreferer_limit:10m rate=2r/m;
 map "$aspace_has_filter_fields:$aspace_has_session" $aspace_facet_scrape {
   default   "";
   "1:0"     "scrape";
@@ -96,7 +102,7 @@ log_format sanitized '$remote_addr - $remote_user [$time_local] "$host" '
                       'rt=$request_time uct="$upstream_response_time" cache=$upstream_cache_status '
                       'req_limit=$limit_req_status conn_limit=$limit_conn_status '
                       'skip_cache=$aspace_skip_cache doubleenc=$aspace_doubleenc deep_page=$aspace_deep_page_logged '
-                      'self_referer=$aspace_self_referer facet_scrape=$aspace_facet_scrape '
+                      'self_referer=$aspace_self_referer has_session=$aspace_has_session self_referer_unsafe=$aspace_self_referer_unsafe facet_scrape=$aspace_facet_scrape '
                       'form_scrape=$aspace_form_scrape detail_scrape=$aspace_detail_scrape '
                       'filter_chain=$aspace_filter_chain';
 
@@ -193,7 +199,7 @@ server {
     proxy_pass http://app_public;
   }
 
-  location ~* ^${PUBLIC_PREFIX}(repositories/resources|repositories/[0-9]+/(resources|objects|accessions|classifications|agents|subjects|digital_objects|search)|objects|agents|subjects|classifications|cite)(/?(\?|$)) {
+  location ~* ^${PUBLIC_PREFIX}(repositories/resources|repositories/[0-9]+/(resources|objects|accessions|classifications|agents|subjects|digital_objects|records|search)|accessions|objects|agents|subjects|classifications|cite)(/?(\?|$)) {
     ${PUI_IPS_ALLOWED};
     deny all;
     include /etc/nginx/discovery-config;
@@ -213,7 +219,7 @@ server {
     proxy_pass http://app_public;
   }
 
-  location ~ ^${PUBLIC_PREFIX}(repositories/[0-9]+/(resources|objects|accessions|classifications|digital_objects|archival_objects)/[0-9]+|agents/(people|corporate_entities|families|software)/[0-9]+|subjects/[0-9]+|classifications/[0-9]+) {
+  location ~ ^${PUBLIC_PREFIX}(repositories/[0-9]+/(resources|objects|accessions|classifications|digital_objects|archival_objects|classification_terms|top_containers)/[0-9]+|agents/(people|corporate_entities|families|software)/[0-9]+|subjects/[0-9]+|classifications/[0-9]+) {
     ${PUI_IPS_ALLOWED};
     deny all;
     include /etc/nginx/discovery-config;

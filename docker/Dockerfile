@@ -1,5 +1,8 @@
 FROM nginx
 
+# Pin to 1 worker so limit_req_zone's shared memory enforces a true global rate instead of ~N x rate across N workers.
+RUN sed -i 's/^worker_processes.*/worker_processes 1;/' /etc/nginx/nginx.conf
+
 ENV API_IPS_ALLOWED="allow 0.0.0.0/0" \
     API_PREFIX="/api/" \
     OAI_PREFIX="/oai" \
