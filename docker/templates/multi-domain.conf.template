@@ -1,77 +1,131 @@
 limit_req_zone $binary_remote_addr zone=waypoints_limit:16m rate=23r/s;
 limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
 limit_req_zone $binary_remote_addr zone=pdf_limit:10m rate=2r/m;
-# Raised 30r/m -> 120r/m so a NAT'd institution isn't throttled as if it were a single user.
 limit_req_zone $binary_remote_addr zone=search_limit:10m rate=120r/m;
 
-# Public-side anti-abuse zones/maps (http context only); enforced in the public location blocks via discovery-config.
-
-# Per-IP cap on simultaneous in-flight discovery requests.
 limit_conn_zone $binary_remote_addr zone=discovery_perip:10m;
-# Per-hostname circuit breaker on total concurrent discovery load against the shared DB.
 limit_conn_zone $server_name        zone=discovery_total:10m;
 
-# Micro-cache storage for discovery responses; TTLs/bypass/stale behavior set in discovery-config.
 proxy_cache_path /var/cache/nginx/aspace levels=1:2 keys_zone=aspace_cache:16m max_size=512m inactive=10m use_temp_path=off;
 
-# Cache-bypass classifier: skip the shared cache for any request carrying a *_session cookie.
 map $http_cookie $aspace_skip_cache {
-  default      0;
-  "~*_session" 1;
+  default                     0;
+  "~*archivesspace_session="  1;
 }
 
-# Redact query strings containing a password (e.g. /staff/api/users/*/login?password=...)
-# from the access log, so credentials never hit /dev/stdout.
 map $args $safe_args {
   default        $args;
   "~*password="  "password=REDACTED";
 }
 
-# Distributed-crawl fingerprint: the swarm double-encodes the match-all wildcard (q[]=%252A); real PUI traffic never does.
 map $args $aspace_doubleenc {
   default      "";
   "~*%252[Aa]" "doubleenc";
 }
 limit_req_zone $aspace_doubleenc zone=doubleenc_limit:10m rate=30r/m;
 
-# Deep-offset pagination (page>=100) throttle, keyed per IP so a human's "last page" click still passes.
 map $arg_page $aspace_deep_page {
   default        "";
   "~^[0-9]{3,}$" $binary_remote_addr;
 }
 limit_req_zone $aspace_deep_page zone=deeppage_limit:10m rate=20r/m;
 
-# Same classifier as $aspace_deep_page, but a loggable flag instead of the raw binary
-# rate-limit key (which would corrupt the access log if written to it directly).
 map $arg_page $aspace_deep_page_logged {
   default        "";
   "~^[0-9]{3,}$" "1";
 }
+
+map "$http_referer|$http_x_forwarded_proto://$host$request_uri" $aspace_self_referer {
+  default          "";
+  "~^(.+)\|\1$"    "1";
+}
+
+map $args $aspace_has_filter_fields {
+  default        0;
+  "~*filter_fields" 1;
+}
+map $http_cookie $aspace_has_session {
+  default                          0;
+  "~*_archivesspace-public_session" 1;
+}
+
+# A self-referrer hit carrying the PUI session cookie is a real client retrying, not a bot -- a cold bot request has no prior response to have gotten the cookie from.
+map "$aspace_self_referer:$aspace_has_session" $aspace_self_referer_unsafe {
+  default "";
+  "1:0"   "1";
+}
+limit_req_zone $aspace_self_referer_unsafe zone=selfreferer_limit:10m rate=2r/m;
+map "$aspace_has_filter_fields:$aspace_has_session" $aspace_facet_scrape {
+  default   "";
+  "1:0"     "scrape";
+}
+map "$aspace_has_filter_fields:$aspace_has_session" $aspace_facet_scrape_key {
+  default   "";
+  "1:0"     $binary_remote_addr;
+}
+limit_req_zone $aspace_facet_scrape_key zone=facetscrape_limit:10m rate=30r/m;
+
+# Global companion to facetscrape_limit: catches an IP-rotating swarm's aggregate volume that no single IP's rate crosses.
+limit_req_zone $aspace_facet_scrape zone=facetscrape_global_limit:10m rate=15r/m;
+
+# Full-form-submission fingerprint: real searches rarely populate every optional field (blanks included); a scripted crawl resubmitting the whole form does, in any order.
+map $args $aspace_form_scrape {
+  default "";
+  "~*^(?=.*field\[\])(?=.*filter_fields\[\])(?=.*from_year\[\])(?=.*op\[\])(?=.*sort=)(?=.*to_year\[\])" "formscrape";
+}
+limit_req_zone $aspace_form_scrape zone=formscrape_limit:10m rate=15r/m;
+
+# Facet-filter params on a single-record detail page: filter_fields/filter_values only mean anything on a list/search view, never on one record's own page.
+map $uri $aspace_is_detail_page {
+  default 0;
+  "~*^/repositories/\d+/(archival_objects|resources|digital_objects|classification_terms|top_containers)/\d+$" 1;
+  "~*^/agents/(people|corporate_entities|families|software)/\d+$" 1;
+  "~*^/subjects/\d+$" 1;
+  "~*^/classifications/\d+$" 1;
+}
+map "$aspace_is_detail_page:$aspace_has_filter_fields" $aspace_detail_scrape {
+  default "";
+  "1:1"   "detailscrape";
+}
+limit_req_zone $aspace_detail_scrape zone=detailscrape_limit:10m rate=8r/m;
+
+# Filter-chain depth: real users chain at most ~3 facet filters per request; bots enumerating combinations chain far more (list or detail pages alike).
+map $args $aspace_filter_chain {
+  default "";
+  "~*^(?:.*?filter_fields(?:\[\]|%5[bB]%5[dD])=){4,}" "filterchain";
+}
+limit_req_zone $aspace_filter_chain zone=filterchain_limit:10m rate=8r/m;
 
 log_format sanitized '$remote_addr - $remote_user [$time_local] "$host" '
                       '"$request_method $uri$is_args$safe_args $server_protocol" '
                       '$status $body_bytes_sent "$http_referer" "$http_user_agent" '
                       'rt=$request_time uct="$upstream_response_time" cache=$upstream_cache_status '
                       'req_limit=$limit_req_status conn_limit=$limit_conn_status '
-                      'skip_cache=$aspace_skip_cache doubleenc=$aspace_doubleenc deep_page=$aspace_deep_page_logged';
+                      'skip_cache=$aspace_skip_cache doubleenc=$aspace_doubleenc deep_page=$aspace_deep_page_logged '
+                      'self_referer=$aspace_self_referer has_session=$aspace_has_session self_referer_unsafe=$aspace_self_referer_unsafe facet_scrape=$aspace_facet_scrape '
+                      'form_scrape=$aspace_form_scrape detail_scrape=$aspace_detail_scrape '
+                      'filter_chain=$aspace_filter_chain';
 
-# Per-IP backstop for the rest of the public surface (record views, assets, path-scanning) not covered by discovery rules.
 limit_req_zone $binary_remote_addr zone=public_backstop:10m rate=20r/s;
 
 upstream app_api {
   server ${UPSTREAM_HOST}:8089;
+  keepalive 8;
 }
 
 upstream app_oai {
   server ${UPSTREAM_HOST}:8082;
+  keepalive 8;
 }
 
 upstream app_public {
   server ${UPSTREAM_HOST}:8081;
+  keepalive 8;
 }
 
 upstream app_staff {
   server ${UPSTREAM_HOST}:8080;
+  keepalive 8;
 }
 
 server_names_hash_bucket_size 128;
@@ -85,7 +139,20 @@ server {
 
   ${ROOT_REDIRECT_BLOCK}
 
-  # Public catch-all: everything not matched by a more specific location; per-IP flood backstop applied.
+  location = / {
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 120s;
+    proxy_pass http://app_public;
+  }
+
+  location = /robots.txt {
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 1h;
+    proxy_pass http://app_public;
+  }
+
   location ${PUBLIC_PREFIX} {
     ${PUI_IPS_ALLOWED};
     deny all;
@@ -97,37 +164,38 @@ server {
       deny all;
   }
 
-  # Block file extensions ArchivesSpace never serves (also catches /start.<ext> appliance-probe scans).
-  location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)$ {
+  location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)(\.(bak|old|save|orig|swp|tmp)|~)?$ {
     return 404;
   }
 
-  # Block known scanner/exploit/appliance-CVE probe paths; none are real ArchivesSpace routes.
   location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf|heapdump|graphql|geoserver|wls-wsat|autodiscover|owa|webui|versa|remote|scadabr|nifi|pandora_console|nidp|officescan|boaform|mailinspector|sap/bc) {
-    return 403;
+    return 404;
   }
 
-  # Block JSF and Java path traversal attempts
   location ~* (javax\.faces\.resource|WEB-INF|META-INF) {
-    return 403;
+    return 404;
   }
 
-  # Public search: heavy injection-probe target, so it runs the full discovery-config defense stack.
+  location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
+    add_header Cache-Control "public, max-age=604800, immutable";
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 1d;
+    proxy_pass http://app_public;
+  }
+
   location ~* ^/(advanced_)?search {
     include /etc/nginx/discovery-config;
     proxy_pass http://app_public;
   }
 
-  # Faceted browse / discovery list pages (the crawl + SQLi target); anchored to exclude record/detail and tree/waypoint views.
-  location ~* ^/(repositories/resources|repositories/[0-9]+/(resources|objects|accessions|classifications|agents|subjects|digital_objects|search)|objects|agents|subjects|classifications|cite)(/?(\?|$)) {
-    # Repeat the IP allow-list here: a regex location takes precedence over the prefix catch-all.
+  location ~* ^/(repositories/resources|repositories/[0-9]+/(resources|objects|accessions|classifications|agents|subjects|digital_objects|records|search)|accessions|objects|agents|subjects|classifications|cite)(/?(\?|$)) {
     ${PUI_IPS_ALLOWED};
     deny all;
     include /etc/nginx/discovery-config;
     proxy_pass http://app_public;
   }
 
-  # Rate-limit PDF generation (CPU-intensive endpoint)
   location ~ ^/repositories/[0-9]+/resources/[0-9]+/pdf$ {
     limit_req zone=pdf_limit burst=4 nodelay;
     proxy_pass http://app_public;
@@ -135,6 +203,16 @@ server {
 
   location ~ ^/repositories/\d+/resources/\d+/infinite/waypoints {
     limit_req zone=waypoints_limit burst=100 delay=100;
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 120s;
+    proxy_pass http://app_public;
+  }
+
+  location ~ ^/(repositories/[0-9]+/(resources|objects|accessions|classifications|digital_objects|archival_objects|classification_terms|top_containers)/[0-9]+|agents/(people|corporate_entities|families|software)/[0-9]+|subjects/[0-9]+|classifications/[0-9]+) {
+    ${PUI_IPS_ALLOWED};
+    deny all;
+    include /etc/nginx/discovery-config;
     proxy_pass http://app_public;
   }
 
@@ -150,32 +228,40 @@ server {
   set_real_ip_from ${REAL_IP_CIDR};
   include /etc/nginx/common-config;
 
-  # Block file extensions ArchivesSpace never serves (also catches /start.<ext> appliance-probe scans).
-  location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)$ {
+  location ~* \.(php|asp|aspx|cgi|action|dll|sh|bat|exe|jsp|jhtml|jsa|cfm|shtml)(\.(bak|old|save|orig|swp|tmp)|~)?$ {
     return 404;
   }
 
-  # Block known scanner/exploit/appliance-CVE probe paths; none are real ArchivesSpace routes.
   location ~* ^/(webdav|sling|adminer|apisix|tcpdf|jkstatus|actuator|console|manager|solr|h2-console|jolokia|api/jsonws|_vti_bin|_vti_pvt|_vti_aut|_vti_inf|heapdump|graphql|geoserver|wls-wsat|autodiscover|owa|webui|versa|remote|scadabr|nifi|pandora_console|nidp|officescan|boaform|mailinspector|sap/bc) {
-    return 403;
+    return 404;
   }
 
-  # Block JSF and Java path traversal attempts
   location ~* (javax\.faces\.resource|WEB-INF|META-INF) {
-    return 403;
+    return 404;
   }
 
-  # Rate-limit staff login to slow brute force attempts
+  location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
+    add_header Cache-Control "public, max-age=604800, immutable";
+    add_header X-Cache-Status $upstream_cache_status always;
+    proxy_cache aspace_cache;
+    proxy_cache_valid 200 1d;
+    proxy_pass http://app_staff;
+  }
+
   location = /staff/login {
     limit_req zone=login_limit burst=10 nodelay;
     ${SUI_IPS_ALLOWED};
     deny all;
+    add_header Cache-Control "no-store" always;
+    add_header Pragma "no-cache" always;
     proxy_pass http://app_staff;
   }
 
   location ${STAFF_PREFIX} {
     ${SUI_IPS_ALLOWED};
     deny all;
+    add_header Cache-Control "no-store" always;
+    add_header Pragma "no-cache" always;
     proxy_pass http://app_staff;
   }
 

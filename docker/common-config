@@ -28,6 +28,7 @@ proxy_connect_timeout   60s;
 proxy_http_version      1.1;
 proxy_read_timeout      300s;
 proxy_send_timeout      300s;
+proxy_set_header        Connection         "";
 proxy_set_header        Host               $host;
 proxy_set_header        X-Forwarded-For    $proxy_add_x_forwarded_for;
 proxy_set_header        X-Forwarded-Host   $host;
@@ -38,10 +39,6 @@ proxy_set_header        X-Real-IP          $remote_addr;
 real_ip_header    X-Forwarded-For;
 real_ip_recursive on;
 
-# TLS is terminated upstream (ALB) and nginx listens on plain HTTP:4000, so
-# absolute redirects would leak the wrong scheme/port (http://host:4000/...)
-# and time out. Emit relative redirects to keep clients on the https origin.
-# fixes /public timeouts
 absolute_redirect off;
 
 send_timeout  300s;
@@ -54,7 +51,12 @@ tcp_nodelay on;
 proxy_cookie_flags ~ ".*" samesite=lax secure;
 
 location ^~ /_ {
-  return 403;
+  return 404;
+  access_log off;
+}
+
+location ~ /assets/$ {
+  return 404;
   access_log off;
 }
 
