@@ -50,6 +50,14 @@ tcp_nodelay on;
 
 proxy_cookie_flags ~ ".*" samesite=lax secure;
 
+# Proxy-generated 503s (limit_req/limit_conn) carry Retry-After so Googlebot backs off; upstream 503s pass through untouched since proxy_intercept_errors is off.
+error_page 503 @retry_after;
+
+location @retry_after {
+  add_header Retry-After 120 always;
+  return 503;
+}
+
 location ^~ /_ {
   return 404;
   access_log off;

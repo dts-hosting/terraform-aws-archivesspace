@@ -76,9 +76,10 @@ map $args $aspace_form_scrape {
 limit_req_zone $aspace_form_scrape zone=formscrape_limit:10m rate=15r/m;
 
 # Facet-filter params on a single-record detail page: filter_fields/filter_values only mean anything on a list/search view, never on one record's own page.
+# top_containers is excluded: its PUI "Additional filters" box legitimately links filter_fields[]=child_container_u_sstr.
 map $uri $aspace_is_detail_page {
   default 0;
-  "~*^/repositories/\d+/(archival_objects|resources|digital_objects|classification_terms|top_containers)/\d+$" 1;
+  "~*^/repositories/\d+/(archival_objects|resources|digital_objects|classification_terms)/\d+$" 1;
   "~*^/agents/(people|corporate_entities|families|software)/\d+$" 1;
   "~*^/subjects/\d+$" 1;
   "~*^/classifications/\d+$" 1;
