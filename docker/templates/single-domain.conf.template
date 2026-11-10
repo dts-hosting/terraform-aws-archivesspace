@@ -141,6 +141,8 @@ server {
   ${ROOT_REDIRECT_BLOCK}
 
   location = / {
+    ${ROOT_IPS_ALLOWED};
+    deny all;
     add_header X-Cache-Status $upstream_cache_status always;
     proxy_cache aspace_cache;
     proxy_cache_valid 200 120s;
@@ -171,6 +173,8 @@ server {
   }
 
   location ~* ^${STAFF_PREFIX}.*assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
+    ${SUI_IPS_ALLOWED};
+    deny all;
     add_header Cache-Control "public, max-age=604800, immutable";
     add_header X-Cache-Status $upstream_cache_status always;
     proxy_cache aspace_cache;
@@ -179,6 +183,8 @@ server {
   }
 
   location ~* assets/.+\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico|map)$ {
+    ${ROOT_IPS_ALLOWED};
+    deny all;
     add_header Cache-Control "public, max-age=604800, immutable";
     add_header X-Cache-Status $upstream_cache_status always;
     proxy_cache aspace_cache;
@@ -196,6 +202,8 @@ server {
   }
 
   location ~* ^${PUBLIC_PREFIX}(advanced_)?search {
+    ${PUI_IPS_ALLOWED};
+    deny all;
     include /etc/nginx/discovery-config;
     proxy_pass http://app_public;
   }
@@ -208,11 +216,15 @@ server {
   }
 
   location ~ ^${PUBLIC_PREFIX}repositories/[0-9]+/resources/[0-9]+/pdf$ {
+    ${PUI_IPS_ALLOWED};
+    deny all;
     limit_req zone=pdf_limit burst=4 nodelay;
     proxy_pass http://app_public;
   }
 
   location ~ ^/repositories/\d+/resources/\d+/infinite/waypoints {
+    ${PUI_IPS_ALLOWED};
+    deny all;
     limit_req zone=waypoints_limit burst=100 delay=100;
     add_header X-Cache-Status $upstream_cache_status always;
     proxy_cache aspace_cache;
