@@ -1,5 +1,8 @@
 FROM nginx
 
+# Fixed worker count: limit_req/limit_conn zones are shared memory, so the count does not change rate accuracy; a fixed count keeps memory and upstream keepalive conns bounded (auto = all 8 host cores on EC2).
+RUN sed -i 's/^worker_processes.*/worker_processes 2;/' /etc/nginx/nginx.conf
+
 ENV API_IPS_ALLOWED="allow 0.0.0.0/0" \
     API_PREFIX="/api/" \
     OAI_PREFIX="/oai" \
